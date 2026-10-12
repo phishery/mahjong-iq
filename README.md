@@ -1,5 +1,7 @@
 # Mahjong IQ
 
+**Live:** https://mahjong-iq.vercel.app (auto-deploys from `main`)
+
 A rapid strategy trainer for **American Mahjong (NMJL-style)**. Each round shows a 13-tile rack, asks you to rank your three most promising card options, runs a legal Charleston against simulated opponents, and makes you re-rank after **every** exchange. A round ends when the Charleston ends. You never play a full game, so you can get through dozens of racks in one sitting.
 
 > The bundled card is a **fictional demo card** written for training. It is not the official National Mah Jongg League card, which is copyrighted and not bundled. You can load a card you own as JSON (see [docs/CARD_FORMAT.md](docs/CARD_FORMAT.md)).
