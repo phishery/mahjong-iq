@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "id": "mahjong-iq-demo-2026",
+  "year": 2026,
+  "title": "Mahjong IQ Demo Training Card",
+  "source": {
+    "kind": "demo",
+    "attribution": "Fictional demo card created for Mahjong IQ. Not an official National Mah Jongg League card.",
+    "official": false,
+    "notes": "Category names follow common card conventions, but every hand below is invented for training purposes. Load a legitimately obtained card definition to practise the real annual card."
+  },
+  "categories": [
+    {
+      "id": "year",
+      "name": "2026",
+      "description": "Hands built from the digits of the year. White Dragon (Soap) stands for zero."
+    },
+    {
+      "id": "even",
+      "name": "2468",
+      "description": "Only even numbers (2, 4, 6, 8), sometimes with Flowers or Dragons."
+    },
+    {
+      "id": "like",
+      "name": "Like Numbers",
+      "description": "The same number repeated in different suits."
+    },
+    {
+      "id": "quints",
+      "name": "Quints",
+      "description": "Groups of five identical tiles. Every quint needs at least one Joker (except Flowers)."
+    },
+    {
+      "id": "run",
+      "name": "Consecutive Runs",
+      "description": "Numbers in a row (e.g. 3-4-5). Any starting number that keeps the run within 1–9."
+    },
+    {
+      "id": "odd",
+      "name": "13579",
+      "description": "Only odd numbers (1, 3, 5, 7, 9)."
+    },
+    {
+      "id": "winds",
+      "name": "Winds & Dragons",
+      "description": "Built mostly or entirely from Winds and Dragons."
+    },
+    {
+      "id": "369",
+      "name": "369",
+      "description": "Only the numbers 3, 6 and 9."
+    },
+    {
+      "id": "sp",
+      "name": "Singles & Pairs",
+      "description": "Concealed hands made only of singles and pairs — no Jokers can be used."
+    }
+  ],
+  "hands": [
+    {"id": "YR-1", "category": "year", "line": 1, "pattern": "2F 12:A 10 12:A 16:A 42:B 46:C", "concealed": false, "value": 25, "description": "FF 2026 2222 6666 — year in one suit, kongs in the other two"},
+    {"id": "YR-2", "category": "year", "line": 2, "pattern": "32:A 30 42:B 46:A", "concealed": false, "value": 25, "description": "222 000 2222 6666 — 2s and 6s in one suit, 2222 in a second suit"},
+    {"id": "YR-3", "category": "year", "line": 3, "pattern": "12:A 10 12:A 16:A 3N 2E 2W 3S", "concealed": false, "value": 30, "description": "2026 NNN EE WW SSS — year in any suit with winds"},
+    {"id": "YR-4", "category": "year", "line": 4, "pattern": "2F 12:A 10 12:A 16:A 12:B 10 12:B 16:B 12:C 10 12:C 16:C", "concealed": true, "value": 75, "description": "FF 2026 2026 2026 — singles only, all three suits (concealed)"},
+    {"id": "YR-5", "category": "year", "line": 5, "pattern": "2F 42:A 40 46:B", "concealed": false, "value": 25, "description": "FF 2222 0000 6666 — 2s and 6s in different suits"},
+    {"id": "EV-1", "category": "even", "line": 1, "pattern": "32:A 44:A 36:A 48:A", "concealed": false, "value": 25, "description": "222 4444 666 8888 — one suit"},
+    {"id": "EV-2", "category": "even", "line": 2, "pattern": "2F 42:A 24:B 26:B 48:A", "concealed": false, "value": 25, "description": "FF 2222 44 66 8888 — 2s and 8s in one suit, pairs in another"},
+    {"id": "EV-3", "category": "even", "line": 3, "pattern": "22:A 24:A 36:B 38:B 4D:C", "concealed": false, "value": 25, "description": "22 44 666 888 DDDD — three suits; dragon kong matches the third suit"},
+    {"id": "EV-4", "category": "even", "line": 4, "pattern": "2F 12:A 14:A 16:A 18:A 42:B 48:C", "concealed": false, "value": 30, "description": "FF 2468 2222 8888 — run of evens in one suit, kongs in the other two"},
+    {"id": "EV-5", "category": "even", "line": 5, "pattern": "2F 22:A 24:A 26:A 28:A 42:B", "concealed": true, "value": 35, "description": "FF 22 44 66 88 2222 — pairs in one suit, 2222 in another (concealed)"},
+    {"id": "EV-6", "category": "even", "line": 6, "pattern": "2F 32:A 34:A 36:B 38:B", "concealed": false, "value": 25, "description": "FF 222 444 666 888 — two suits"},
+    {"id": "EV-7", "category": "even", "line": 7, "pattern": "2F 4x:A 4x+2:B 4x+4:C", "vars": {"x": [2, 4]}, "concealed": false, "value": 25, "description": "FF 2222 4444 6666 or FF 4444 6666 8888 — three suits"},
+    {"id": "LK-1", "category": "like", "line": 1, "pattern": "2F 4x:A 4x:B 4x:C", "concealed": false, "value": 25, "description": "FF 1111 1111 1111 — any like number, kong in each suit"},
+    {"id": "LK-2", "category": "like", "line": 2, "pattern": "2F 3x:A 3D:A 3x:B 3D:B", "concealed": false, "value": 25, "description": "FF 111 DDD 111 DDD — like numbers with matching dragons, two suits"},
+    {"id": "LK-3", "category": "like", "line": 3, "pattern": "1N 1E 1W 1S 3x:A 3x:B 4x:C", "concealed": false, "value": 30, "description": "NEWS 111 111 1111 — single winds plus like numbers in three suits"},
+    {"id": "QT-1", "category": "quints", "line": 1, "pattern": "5x:A 4x+1:A 5x+2:A", "concealed": false, "value": 40, "description": "11111 2222 33333 — consecutive numbers, one suit"},
+    {"id": "QT-2", "category": "quints", "line": 2, "pattern": "5x:A 4x:B 5x:C", "concealed": false, "value": 40, "description": "11111 1111 11111 — like numbers, three suits"},
+    {"id": "QT-3", "category": "quints", "line": 3, "pattern": "5N 2E 2W 5S", "concealed": false, "value": 45, "description": "NNNNN EE WW SSSSS"},
+    {"id": "RN-1", "category": "run", "line": 1, "pattern": "2x:A 3x+1:A 4x+2:A 3x+3:A 2x+4:A", "concealed": false, "value": 25, "description": "11 222 3333 444 55 — five consecutive numbers, one suit"},
+    {"id": "RN-2", "category": "run", "line": 2, "pattern": "2F 4x:A 4x+1:B 4x+2:C", "concealed": false, "value": 25, "description": "FF 1111 2222 3333 — three consecutive numbers, three suits"},
+    {"id": "RN-3", "category": "run", "line": 3, "pattern": "2F 4x:A 4x+1:A 4x+2:A", "concealed": false, "value": 25, "description": "FF 1111 2222 3333 — three consecutive numbers, one suit"},
+    {"id": "RN-4", "category": "run", "line": 4, "pattern": "3x:A 4x+1:A 3x+2:A 4D:B", "concealed": false, "value": 25, "description": "111 2222 333 DDDD — run in one suit, dragon kong of another suit"},
+    {"id": "RN-5", "category": "run", "line": 5, "pattern": "2F 1x:A 1x+1:A 1x+2:A 1x+3:A 4x:B 4x+3:C", "concealed": false, "value": 30, "description": "FF 1234 1111 4444 — four in a row in one suit, the end numbers as kongs in the other two"},
+    {"id": "RN-6", "category": "run", "line": 6, "pattern": "2x:A 2x+1:A 2x+2:A 2x+3:A 2x+4:A 2x+5:A 2x+6:A", "concealed": true, "value": 50, "description": "11 22 33 44 55 66 77 — seven consecutive pairs, one suit (concealed)"},
+    {"id": "OD-1", "category": "odd", "line": 1, "pattern": "21:A 33:A 45:A 37:A 29:A", "concealed": false, "value": 25, "description": "11 333 5555 777 99 — one suit"},
+    {"id": "OD-2", "category": "odd", "line": 2, "pattern": "3F 35:A 47:A 49:A", "concealed": false, "value": 25, "description": "FFF 555 7777 9999 — one suit"},
+    {"id": "OD-3", "category": "odd", "line": 3, "pattern": "2F 31:A 33:A 35:B 37:B", "concealed": false, "value": 25, "description": "FF 111 333 555 777 — 1s and 3s in one suit, 5s and 7s in another"},
+    {"id": "OD-4", "category": "odd", "line": 4, "pattern": "11:A 13:A 15:A 17:A 19:A 31:B 33:B 3D:B", "concealed": false, "value": 30, "description": "13579 111 333 DDD — single odds in one suit, pungs with matching dragon in another"},
+    {"id": "OD-5", "category": "odd", "line": 5, "pattern": "2F 4x:A 4x+2:B 4x+4:C", "vars": {"x": [1, 3, 5]}, "concealed": false, "value": 25, "description": "FF 1111 3333 5555 (or 3-5-7, 5-7-9) — consecutive odd numbers, three suits"},
+    {"id": "OD-6", "category": "odd", "line": 6, "pattern": "2F 31:A 35:A 37:B 39:B", "concealed": false, "value": 25, "description": "FF 111 555 777 999 — two suits"},
+    {"id": "WD-1", "category": "winds", "line": 1, "pattern": "4N 3E 3W 4S", "concealed": false, "value": 25, "description": "NNNN EEE WWW SSSS"},
+    {"id": "WD-2", "category": "winds", "line": 2, "pattern": "2F 3N 3E 3W 3S", "concealed": false, "value": 25, "description": "FF NNN EEE WWW SSS"},
+    {"id": "WD-3", "category": "winds", "line": 3, "pattern": "2N 2E 3W 3S 4D:A", "concealed": false, "value": 25, "description": "NN EE WWW SSS DDDD — any one dragon"},
+    {"id": "WD-4", "category": "winds", "line": 4, "pattern": "2F 4D:A 4D:B 4D:C", "concealed": false, "value": 30, "description": "FF DDDD DDDD DDDD — all three dragons"},
+    {"id": "WD-5", "category": "winds", "line": 5, "pattern": "1N 1E 1W 1S 2F 4D:A 4D:B", "concealed": false, "value": 30, "description": "NEWS FF DDDD DDDD — any two dragons"},
+    {"id": "WD-6", "category": "winds", "line": 6, "pattern": "2N 2E 2W 2S 2D:A 2D:B 2D:C", "concealed": true, "value": 50, "description": "NN EE WW SS DD DD DD — pairs of every wind and dragon (concealed)"},
+    {"id": "WD-7", "category": "winds", "line": 7, "pattern": "3N 3E 3W 3S 2D:A", "concealed": false, "value": 25, "description": "NNN EEE WWW SSS DD — any dragon pair"},
+    {"id": "WD-8", "category": "winds", "line": 8, "pattern": "3F 2N 2E 2W 2S 3D:A", "concealed": false, "value": 30, "description": "FFF NN EE WW SS DDD — any dragon"},
+    {"id": "TN-1", "category": "369", "line": 1, "pattern": "33:A 36:A 49:A 4D:B", "concealed": false, "value": 25, "description": "333 666 9999 DDDD — one suit plus a dragon kong of another suit"},
+    {"id": "TN-2", "category": "369", "line": 2, "pattern": "2F 43:A 46:B 49:C", "concealed": false, "value": 25, "description": "FF 3333 6666 9999 — three suits"},
+    {"id": "TN-3", "category": "369", "line": 3, "pattern": "2F 43:A 46:A 49:A", "concealed": false, "value": 25, "description": "FF 3333 6666 9999 — one suit"},
+    {"id": "TN-4", "category": "369", "line": 4, "pattern": "2F 13:A 26:A 39:A 13:B 26:B 39:B", "concealed": false, "value": 30, "description": "FF 3 66 999 3 66 999 — two suits"},
+    {"id": "TN-5", "category": "369", "line": 5, "pattern": "2F 33:A 36:A 39:A 33:B", "concealed": false, "value": 25, "description": "FF 333 666 999 333 — run in one suit, 3s in another"},
+    {"id": "TN-6", "category": "369", "line": 6, "pattern": "2F 43:A 26:B 49:A 2D:B", "concealed": false, "value": 30, "description": "FF 3333 66 9999 DD — 3s and 9s in one suit, 6s with their dragon in another"},
+    {"id": "SP-1", "category": "sp", "line": 1, "pattern": "2F 2x:A 2x+1:A 2x+2:A 2x+3:A 2x+4:A 2D:B", "concealed": true, "value": 50, "description": "FF 11 22 33 44 55 DD — consecutive pairs in one suit, dragon pair of another"},
+    {"id": "SP-2", "category": "sp", "line": 2, "pattern": "1N 1E 1W 1S 11:A 13:A 15:A 17:A 19:A 11:B 13:B 15:B 17:B 19:B", "concealed": true, "value": 75, "description": "NEWS 13579 13579 — two suits"},
+    {"id": "SP-3", "category": "sp", "line": 3, "pattern": "2F 12:A 14:A 16:A 18:A 2D:A 12:B 14:B 16:B 18:B 2D:B", "concealed": true, "value": 50, "description": "FF 2468 DD 2468 DD — two suits with matching dragon pairs"}
+  ]
+}
