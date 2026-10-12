@@ -80,3 +80,14 @@ Joker eligibility comes from the group size, following NMJL practice. Each line 
 5. In the app, open **Card → Load a card → Import card JSON…**.
 
 Keep a transcribed official card in `private-cards/`. That folder is git-ignored, so the card can't be committed to the public repository by accident.
+
+## Sharing a card with a passcode
+
+The deployed site can hand out a card to people who know a passcode, without the card ever entering the repository or the static bundle. The `api/unlock-card.ts` function reads two environment variables set in the Vercel project:
+
+- `CARD_JSON`: the card file (minified JSON)
+- `CARD_PASSCODE`: the passcode
+
+Players enter the passcode under **Card → Load a card → Have a passcode?**, or open a link like `https://<site>/#unlock=<passcode>`. The passcode stays in the URL fragment, so it never reaches the server logs, and the app removes it from the address bar. Once unlocked, the card is saved in that browser.
+
+To update the card: `vercel env update CARD_JSON production < card.min.json`, then redeploy.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { loadCard } from '../engine/card/parser';
+import { loadCard, validateCard } from '../engine/card/parser';
 import type { HandVariant, LoadedCard } from '../engine/card/schema';
 import { DEMO_CARD_JSON, getDemoCard } from '../engine/cards';
 import { MODE_INFO, type RoundState } from '../engine/game';
@@ -12,6 +12,7 @@ import { ProgressDialog, SettingsDialog } from './Dialogs';
 import { GameScreen, type Drill } from './GameScreen';
 import { Home, type StartRequest } from './Home';
 import {
+  fetchUnlockedCard,
   loadCustomCard,
   loadProgress,
   loadSettings,
@@ -20,6 +21,7 @@ import {
   saveProgress,
   saveSettings,
   SimClient,
+  takeUnlockFromHash,
   type Settings,
 } from './lib';
 import { Report } from './Report';
@@ -48,6 +50,8 @@ export function App() {
   const [lastStart, setLastStart] = useState<StartRequest | null>(null);
   const [roundNo, setRoundNo] = useState(0);
   const [cardOpen, setCardOpen] = useState(false);
+  const [cardTab, setCardTab] = useState<'card' | 'source'>('card');
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [progressOpen, setProgressOpen] = useState(false);
   const [focus, setFocus] = useState<HandVariant | null>(null);
@@ -117,6 +121,28 @@ export function App() {
     setScreen('home');
   };
 
+  const openCard = (tab: 'card' | 'source' = 'card') => {
+    setCardTab(tab);
+    setCardOpen(true);
+  };
+
+  // Shared unlock link: mahjong-iq.vercel.app/#unlock=<passcode>
+  const importRef = useRef(importCard);
+  importRef.current = importCard;
+  useEffect(() => {
+    const passcode = takeUnlockFromHash();
+    if (!passcode) return;
+    setNotice({ ok: true, text: 'Unlocking your card…' });
+    fetchUnlockedCard(passcode)
+      .then((json) => {
+        const res = validateCard(json);
+        if (!res.ok) throw new Error('The card on the server has errors — ask the site owner to check it.');
+        importRef.current(json);
+        setNotice({ ok: true, text: `Card unlocked: ${(json as { title: string }).title}. It’s saved in this browser.` });
+      })
+      .catch((e: Error) => setNotice({ ok: false, text: e.message }));
+  }, []);
+
   const rackCounts = useMemo(() => (round ? countsFromIds(round.racks.you) : null), [round]);
   const anim = settings.animations === 'off' ? 'no-anim' : '';
 
@@ -130,10 +156,22 @@ export function App() {
           setScreen('home');
           setFocus(null);
         }}
-        onCard={() => setCardOpen(true)}
+        onCard={() => openCard()}
         onSettings={() => setSettingsOpen(true)}
         demoCard={card.def.source.kind === 'demo'}
       />
+      {notice && (
+        <div
+          role="status"
+          data-testid="unlock-notice"
+          className={cx('mx-auto mt-3 max-w-6xl w-[calc(100%-2rem)] rounded-xl px-3 py-2 text-sm flex items-center gap-3', notice.ok ? 'bg-jade-50 text-jade-800' : 'bg-red-50 text-[#8f2d22]')}
+        >
+          <span className="flex-1">{notice.text}</span>
+          <button type="button" onClick={() => setNotice(null)} className="text-xs font-semibold opacity-70 hover:opacity-100" aria-label="Dismiss">
+            ✕
+          </button>
+        </div>
+      )}
       <main className="flex-1">
         {screen === 'home' && (
           <Home
@@ -142,7 +180,8 @@ export function App() {
             setSettings={setSettings}
             progress={progress}
             onStart={start}
-            onOpenCard={() => setCardOpen(true)}
+            onOpenCard={() => openCard()}
+            onUnlockCard={() => openCard('source')}
             onOpenProgress={() => setProgressOpen(true)}
             sessionStart={sessionStart.current}
           />
@@ -155,7 +194,7 @@ export function App() {
             drill={drill}
             onReport={() => setScreen('report')}
             onNextRack={again}
-            onOpenCard={() => setCardOpen(true)}
+            onOpenCard={() => openCard()}
             focus={focus}
             setFocus={setFocus}
           />
@@ -178,6 +217,7 @@ export function App() {
         onImport={importCard}
         onResetCard={resetCard}
         customActive={custom}
+        initialTab={cardTab}
         revealCounts={!round || round.phase !== 'rank'}
       />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} settings={settings} setSettings={setSettings} />

@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { validateCard } from '../engine/card/parser';
 import type { HandVariant, LoadedCard } from '../engine/card/schema';
 import { matchVariant } from '../engine/evaluator';
 import { Button, Chip, cx, Drawer, PatternText, VariantTiles } from './components';
+import { fetchUnlockedCard } from './lib';
 
 export function CardReference({
   open,
@@ -14,6 +15,7 @@ export function CardReference({
   onResetCard,
   customActive,
   revealCounts,
+  initialTab = 'card',
 }: {
   open: boolean;
   onClose: () => void;
@@ -25,6 +27,8 @@ export function CardReference({
   customActive: boolean;
   /** Show per-line "tiles held" counts (hidden while the player is ranking, to avoid giving answers away). */
   revealCounts: boolean;
+  /** Tab shown each time the drawer opens. */
+  initialTab?: 'card' | 'source';
 }) {
   const [cat, setCat] = useState<string>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -32,6 +36,12 @@ export function CardReference({
   const [tab, setTab] = useState<'card' | 'guide' | 'source'>('card');
   const [importMsg, setImportMsg] = useState<{ ok: boolean; lines: string[] } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [passcode, setPasscode] = useState('');
+  const [unlocking, setUnlocking] = useState(false);
+
+  useEffect(() => {
+    if (open) setTab(initialTab);
+  }, [open, initialTab]);
 
   const lines = useMemo(() => card.lines.filter((l) => cat === 'all' || l.category === cat), [card, cat]);
   const variantCounts = useMemo(() => {
@@ -40,18 +50,34 @@ export function CardReference({
     return m;
   }, [card]);
 
+  const applyCard = (json: { title?: string }) => {
+    const res = validateCard(json);
+    if (!res.ok) {
+      setImportMsg({ ok: false, lines: res.errors.slice(0, 12) });
+      return;
+    }
+    onImport(json);
+    setImportMsg({ ok: true, lines: [`Loaded "${json.title}" (${res.variantCount} hand variations).`, ...res.warnings] });
+  };
+
   const handleFile = async (f: File) => {
     try {
-      const json = JSON.parse(await f.text());
-      const res = validateCard(json);
-      if (!res.ok) {
-        setImportMsg({ ok: false, lines: res.errors.slice(0, 12) });
-        return;
-      }
-      onImport(json);
-      setImportMsg({ ok: true, lines: [`Loaded "${json.title}" (${res.variantCount} hand variations).`, ...res.warnings] });
+      applyCard(JSON.parse(await f.text()));
     } catch (e) {
       setImportMsg({ ok: false, lines: [`Could not read file: ${(e as Error).message}`] });
+    }
+  };
+
+  const handleUnlock = async () => {
+    if (!passcode.trim()) return;
+    setUnlocking(true);
+    try {
+      applyCard((await fetchUnlockedCard(passcode)) as { title?: string });
+      setPasscode('');
+    } catch (e) {
+      setImportMsg({ ok: false, lines: [(e as Error).message] });
+    } finally {
+      setUnlocking(false);
     }
   };
 
@@ -165,6 +191,32 @@ export function CardReference({
             Mahjong IQ ships with a <strong className="text-ink">fictional demo card</strong>. The official NMJL card is copyrighted, so it isn’t bundled. If you own a card,
             you can enter it as JSON (see <code className="text-xs bg-paper px-1 rounded">docs/CARD_FORMAT.md</code>) and load it here. Cards are validated before use and stored only in this browser.
           </p>
+          <form
+            className="rounded-xl border border-line bg-white p-3 space-y-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleUnlock();
+            }}
+          >
+            <p className="font-semibold text-ink">Have a passcode?</p>
+            <p className="text-xs">Unlock the card the site owner has set up. It’s then saved in this browser.</p>
+            <div className="flex gap-2">
+              <input
+                value={passcode}
+                onChange={(e) => setPasscode(e.target.value)}
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="Passcode"
+                aria-label="Card passcode"
+                data-testid="unlock-passcode"
+                className="flex-1 min-w-0 h-10 rounded-xl border border-line px-3 text-sm bg-white"
+              />
+              <Button type="submit" disabled={unlocking || !passcode.trim()} data-testid="unlock-submit">
+                {unlocking ? 'Unlocking…' : 'Unlock card'}
+              </Button>
+            </div>
+          </form>
+          <p className="text-xs">Or load a card file you’ve entered yourself:</p>
           <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
           <div className="flex gap-2 flex-wrap">
             <Button variant="secondary" onClick={() => fileRef.current?.click()}>

@@ -93,6 +93,31 @@ export function saveCustomCard(json: unknown | null) {
   }
 }
 
+/** Ask the server for the passcode-protected card. Resolves to the card JSON or throws a readable error. */
+export async function fetchUnlockedCard(passcode: string): Promise<unknown> {
+  let res: Response;
+  try {
+    res = await fetch('/api/unlock-card', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ passcode }),
+    });
+  } catch {
+    throw new Error('Couldn’t reach the server — check your connection and try again.');
+  }
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((body as { error?: string } | null)?.error ?? `Unlock failed (${res.status}).`);
+  return body;
+}
+
+/** A passcode carried in the URL fragment (#unlock=…), which never reaches the server logs. */
+export function takeUnlockFromHash(): string | null {
+  const m = /^#unlock=([^&]+)/.exec(window.location.hash);
+  if (!m) return null;
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+  return decodeURIComponent(m[1]);
+}
+
 export function simSettingsFrom(s: Settings, seed: number): SimSettings {
   return { draws: s.horizon, trials: s.simPrecision === 'precise' ? 4000 : 1000, seed, model: s.simModel };
 }

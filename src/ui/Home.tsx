@@ -33,6 +33,7 @@ export function Home({
   progress,
   onStart,
   onOpenCard,
+  onUnlockCard,
   onOpenProgress,
   sessionStart,
 }: {
@@ -42,6 +43,7 @@ export function Home({
   progress: ProgressData;
   onStart: (r: StartRequest) => void;
   onOpenCard: () => void;
+  onUnlockCard: () => void;
   onOpenProgress: () => void;
   sessionStart: number;
 }) {
@@ -72,7 +74,10 @@ export function Home({
           </div>
           {card.def.source.kind === 'demo' ? (
             <p className="mt-3 text-xs text-[#7a5a14] bg-[#fbf3e1] inline-block rounded-lg px-2.5 py-1.5">
-              Using the fictional <strong>{card.def.title}</strong> — not an official NMJL card.
+              Using the fictional <strong>{card.def.title}</strong> — not an official NMJL card.{' '}
+              <button type="button" onClick={onUnlockCard} className="underline font-semibold" data-testid="home-unlock">
+                Have a passcode?
+              </button>
             </p>
           ) : (
             <p className="mt-3 text-xs text-jade-800 bg-jade-50 inline-block rounded-lg px-2.5 py-1.5">
