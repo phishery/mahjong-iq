@@ -3,22 +3,19 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Mahjong IQ — a rapid American Mahjong Charleston strategy trainer",
+  "description": "Mahjong IQ \u2014 a rapid American Mahjong Charleston strategy trainer",
   "scripts": {
-    "dev": "concurrently -k -n web,coach -c green,blue \"vite\" \"tsx watch server/index.ts\"",
-    "dev:web": "vite",
-    "dev:server": "tsx server/index.ts",
-    "build": "tsc -b && vite build",
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
-    "start": "npm run build && concurrently -k -n web,coach \"vite preview --port 5173\" \"tsx server/index.ts\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "typecheck": "tsc -b --noEmit",
-    "validate-card": "tsx scripts/validate-card.ts"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "validate-card": "tsx scripts/validate-card.ts",
+    "calibrate": "tsx scripts/calibrate-heuristic.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.133.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "zod": "^4.6.6"
@@ -30,7 +27,6 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
-    "concurrently": "^10.0.6",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

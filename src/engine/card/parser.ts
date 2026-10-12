@@ -155,19 +155,24 @@ export function expandLine(def: HandLineDef, groups: PatternGroup[], categoryNam
       const kinds: number[] = [];
       for (let i = 0; i < NUM_KINDS; i++) if (needNJ[i] || needJ[i]) kinds.push(i);
 
-      const parts = [
+      const idParts = [
         ...numVars.map((v) => `${v}=${nums[v]}`),
         ...suitVars.map((sv) => `${sv}=${SUIT_NAMES[suits[sv] as Suit]}`),
       ];
+      // Human label: "start 3 · Bam/Crak" (suits listed in colour order green/red/blue).
+      const labelParts = [
+        ...numVars.map((v) => (numVars.length === 1 ? `start ${nums[v]}` : `${v} ${nums[v]}`)),
+        ...(suitVars.length ? [suitVars.map((sv) => SUIT_NAMES[suits[sv] as Suit]).join('/')] : []),
+      ];
       variants.push({
-        id: `${def.id}|${parts.join('|') || 'fixed'}`,
+        id: `${def.id}|${idParts.join('|') || 'fixed'}`,
         index: -1,
         lineId: def.id,
         categoryId: def.category,
         groups: concrete,
         suits,
         nums,
-        configLabel: parts.join(', ').replace(/=/g, ' = ') || 'Fixed tiles',
+        configLabel: labelParts.join(' · ') || 'Fixed tiles',
         needNJ,
         needJ,
         kinds: Int16Array.from(kinds),
@@ -339,7 +344,7 @@ export function loadCard(raw: unknown): LoadedCard {
 }
 
 /** Display string for a pattern, e.g. "FF 1111 2222 3333" (variables shown as their minimum value). */
-export function patternDisplayTokens(line: HandLine): { text: string; suitVar: SuitVar | null }[] {
+export function patternDisplayTokens(line: HandLine): { text: string; suitVar: SuitVar | null; count: number }[] {
   const domMin: Record<string, number> = {};
   for (const v of line.variants) for (const [k, n] of Object.entries(v.nums)) domMin[k] = Math.min(domMin[k] ?? 9, n);
   return line.groups.map((g) => {
@@ -350,11 +355,47 @@ export function patternDisplayTokens(line: HandLine): { text: string; suitVar: S
     else sym = String(e.abs ?? (domMin[e.varName!] ?? 1) + e.offset);
     // Multi-char symbols (Wh) are shown once with a count; single chars are repeated.
     const text = sym.length === 1 ? sym.repeat(g.count) : `${sym}×${g.count}`;
-    return { text, suitVar: g.suitVar };
+    return { text, suitVar: g.suitVar, count: g.count };
   });
 }
 
 /** Does any line in the card use number variables (i.e. "any consecutive numbers")? */
 export function lineHasVariables(line: HandLine): boolean {
   return line.variants.length > 1;
+}
+
+/**
+ * Resolve a (possibly de-duplicated) variant of a line from a suit/number configuration.
+ * Returns null if the configuration is illegal (e.g. repeated suits or numbers out of range).
+ */
+export function resolveVariant(
+  line: HandLine,
+  suits: Partial<Record<SuitVar, Suit>>,
+  nums: Record<string, number>,
+): HandVariant | null {
+  const used = Object.values(suits);
+  if (new Set(used).size !== used.length) return null;
+  let concrete: ConcreteGroup[];
+  try {
+    concrete = line.groups.map((g) => ({
+      kind: resolveKind(g, suits, nums),
+      count: g.count,
+      jokerable: line.jokers !== 'none' && g.count >= 3,
+    }));
+  } catch {
+    return null;
+  }
+  const sig = concreteSignature(concrete);
+  return line.variants.find((v) => concreteSignature(v.groups) === sig) ?? null;
+}
+
+/** Suit variables and number-variable domains used by a line (for configuration pickers). */
+export function lineVariables(line: HandLine): { suitVars: SuitVar[]; numVars: { name: string; values: number[] }[] } {
+  const suitVars = [...new Set(line.groups.map((g) => g.suitVar).filter((s): s is SuitVar => !!s))].sort();
+  const names = [...new Set(line.variants.flatMap((v) => Object.keys(v.nums)))].sort();
+  const numVars = names.map((name) => ({
+    name,
+    values: [...new Set(line.variants.map((v) => v.nums[name]))].sort((a, b) => a - b),
+  }));
+  return { suitVars, numVars };
 }
