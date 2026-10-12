@@ -199,16 +199,24 @@ function joinsPrevious(tokens: { count: number; suitVar: SuitVar | null }[], i: 
 }
 
 /** NMJL-style colour-coded pattern text, e.g. "FF 1111 2222 3333". */
-export function PatternText({ line, className }: { line: HandLine; className?: string }) {
-  const tokens = patternDisplayTokens(line);
+export function PatternText({ line, className, alt }: { line: HandLine; className?: string; alt?: number }) {
+  const alts = alt === undefined ? line.alternatives.map((_, i) => i) : [alt];
   return (
     <span className={cx('font-mono font-semibold tracking-wide', className)}>
-      {tokens.map((t, i) => (
-        // Adjacent singles (e.g. the year "2026") are written together, as on the card.
-        <span key={i} className={cx(t.suitVar ? SUITVAR_COLOR[t.suitVar] : 'text-ink', i > 0 && !joinsPrevious(tokens, i) && 'ml-2')}>
-          {t.text}
-        </span>
-      ))}
+      {alts.map((a, ai) => {
+        const tokens = patternDisplayTokens(line, a);
+        return (
+          <span key={a}>
+            {ai > 0 && <span className="mx-2 font-sans text-[0.75em] font-normal italic text-ink-faint">-or-</span>}
+            {tokens.map((t, i) => (
+              // Adjacent singles (e.g. the year "2026") are written together, as on the card.
+              <span key={i} className={cx(t.suitVar ? SUITVAR_COLOR[t.suitVar] : 'text-ink', i > 0 && !joinsPrevious(tokens, i) && 'ml-2')}>
+                {t.text}
+              </span>
+            ))}
+          </span>
+        );
+      })}
     </span>
   );
 }

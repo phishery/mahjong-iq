@@ -74,6 +74,21 @@ describe('card pattern parser', () => {
     expect(vs).toHaveLength(18);
   });
 
+  it('expands "-or-" alternatives and de-duplicates hands shared between them', () => {
+    const raw = structuredClone(DEMO_CARD_JSON) as { hands: Record<string, unknown>[] };
+    raw.hands = [
+      { id: 'ALT', category: 'run', line: 1, pattern: ['2F 4x:A 4x+1:A 4x+2:A', '2F 4x:A 4x+1:B 4x+2:C'], concealed: false },
+      { id: 'DUP', category: 'run', line: 2, pattern: ['4N 3E 3W 4S', '4N 3E 3W 4S'], concealed: false },
+    ];
+    const c = loadCard(raw);
+    const alt = c.lineById.get('ALT')!;
+    expect(alt.alternatives).toHaveLength(2);
+    expect(alt.variants.filter((v) => v.alt === 0)).toHaveLength(21); // 7 starts × 3 suits
+    expect(alt.variants.filter((v) => v.alt === 1)).toHaveLength(42); // 7 starts × 6 suit orders
+    expect(new Set(alt.variants.map((v) => v.id)).size).toBe(alt.variants.length);
+    expect(c.lineById.get('DUP')!.variants).toHaveLength(1);
+  });
+
   it('marks only groups of 3+ as joker-eligible', () => {
     const v = card.lineById.get('RN-1')!.variants[0];
     expect(v.groups.map((g) => [g.count, g.jokerable])).toEqual([

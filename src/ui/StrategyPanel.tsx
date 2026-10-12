@@ -301,12 +301,18 @@ function VariantBuilder({
   onFocus: (v: HandVariant | null) => void;
   onBack: () => void;
 }) {
-  const vars = useMemo(() => lineVariables(line), [line]);
-  const first = line.variants[0];
-  const [suits, setSuits] = useState<Partial<Record<SuitVar, Suit>>>({ ...first.suits });
-  const [nums, setNums] = useState<Record<string, number>>({ ...first.nums });
+  const [alt, setAlt] = useState(0);
+  const vars = useMemo(() => lineVariables(line, alt), [line, alt]);
+  const firstOf = (a: number) => line.variants.find((v) => v.alt === a) ?? line.variants[0];
+  const [suits, setSuits] = useState<Partial<Record<SuitVar, Suit>>>({ ...firstOf(0).suits });
+  const [nums, setNums] = useState<Record<string, number>>({ ...firstOf(0).nums });
   const [showAll, setShowAll] = useState(false);
-  const variant = resolveVariant(line, suits, nums);
+  const variant = resolveVariant(line, suits, nums, alt);
+  const chooseAlt = (a: number) => {
+    setAlt(a);
+    setSuits({ ...firstOf(a).suits });
+    setNums({ ...firstOf(a).nums });
+  };
   const taken = variant ? selected.includes(`variant:${variant.id}`) : false;
 
   useEffect(() => {
@@ -323,8 +329,18 @@ function VariantBuilder({
         <div className="text-xs font-semibold text-ink-faint mb-1">
           {line.categoryName} #{line.line} {line.concealed ? '· Concealed' : '· Exposed'}
         </div>
-        <PatternText line={line} className="text-sm" />
+        <PatternText line={line} className="text-sm" alt={line.alternatives.length > 1 ? alt : undefined} />
         <p className="text-[11px] text-ink-faint mt-1">{line.description}</p>
+        {line.alternatives.length > 1 && (
+          <div className="mt-2 flex items-center gap-1.5">
+            <span className="text-xs text-ink-soft w-20">Version</span>
+            {line.alternatives.map((_, a) => (
+              <Chip key={a} active={alt === a} onClick={() => chooseAlt(a)} className="h-7 text-xs">
+                {a === 0 ? 'First' : a === 1 ? 'Or…' : `Or (${a + 1})`}
+              </Chip>
+            ))}
+          </div>
+        )}
         {(vars.suitVars.length > 0 || vars.numVars.length > 0) && (
           <div className="mt-3 space-y-2">
             {vars.numVars.map((nv) => (
@@ -356,7 +372,7 @@ function VariantBuilder({
           {variant ? (
             <VariantTiles variant={variant} rack={rack} size="xs" />
           ) : (
-            <p className="text-xs text-crak">Each suit colour must be a different suit.</p>
+            <p className="text-xs text-crak">That combination isn’t legal for this line (each colour must be a different suit, and different number variables must differ).</p>
           )}
         </div>
         <Button

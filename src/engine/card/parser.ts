@@ -113,7 +113,24 @@ function concreteSignature(groups: ConcreteGroup[]): string {
     .join(' ');
 }
 
-export function expandLine(def: HandLineDef, groups: PatternGroup[], categoryName: string): HandVariant[] {
+export function patternsOf(def: HandLineDef): string[] {
+  return Array.isArray(def.pattern) ? def.pattern : [def.pattern];
+}
+
+/** Expand every alternative of a line, de-duplicating identical concrete hands across them. */
+export function expandAlternatives(def: HandLineDef, alternatives: PatternGroup[][]): HandVariant[] {
+  const seen = new Set<string>();
+  return alternatives.flatMap((groups, alt) => expandLine(def, groups, '', alt, alternatives.length, seen));
+}
+
+export function expandLine(
+  def: HandLineDef,
+  groups: PatternGroup[],
+  categoryName: string,
+  alt = 0,
+  altCount = 1,
+  seen: Set<string> = new Set(),
+): HandVariant[] {
   const suitVars = [...new Set(groups.map((g) => g.suitVar).filter((s): s is SuitVar => !!s))].sort();
   const numVars = [
     ...new Set(groups.flatMap((g) => (g.expr.t === 'num' && g.expr.varName ? [g.expr.varName] : []))),
@@ -122,7 +139,6 @@ export function expandLine(def: HandLineDef, groups: PatternGroup[], categoryNam
   const distinct = def.distinctVars ?? true;
   const noJokers = def.jokers === 'none';
 
-  const seen = new Set<string>();
   const variants: HandVariant[] = [];
   for (const perm of permutations(SUITS, suitVars.length)) {
     const suits: Partial<Record<SuitVar, Suit>> = {};
@@ -161,14 +177,16 @@ export function expandLine(def: HandLineDef, groups: PatternGroup[], categoryNam
       ];
       // Human label: "start 3 · Bam/Crak" (suits listed in colour order green/red/blue).
       const labelParts = [
+        ...(altCount > 1 ? [`option ${alt + 1}`] : []),
         ...numVars.map((v) => (numVars.length === 1 ? `start ${nums[v]}` : `${v} ${nums[v]}`)),
         ...(suitVars.length ? [suitVars.map((sv) => SUIT_NAMES[suits[sv] as Suit]).join('/')] : []),
       ];
       variants.push({
-        id: `${def.id}|${idParts.join('|') || 'fixed'}`,
+        id: `${def.id}|${alt > 0 ? `alt${alt + 1}|` : ''}${idParts.join('|') || 'fixed'}`,
         index: -1,
         lineId: def.id,
         categoryId: def.category,
+        alt,
         groups: concrete,
         suits,
         nums,
@@ -207,7 +225,7 @@ const CardShape = z.object({
         id: z.string().min(1),
         category: z.string().min(1),
         line: z.number().int().positive(),
-        pattern: z.string().min(1),
+        pattern: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
         concealed: z.boolean(),
         value: z.number().optional(),
         description: z.string().optional(),
@@ -278,25 +296,32 @@ export function validateCard(raw: unknown): ValidationResult {
     const lk = `${h.category}#${h.line}`;
     if (lineKeys.has(lk)) warnings.push(`${h.id}: line number ${h.line} repeated in category "${h.category}"`);
     lineKeys.add(lk);
-    let groups: PatternGroup[];
+    let alternatives: PatternGroup[][];
     try {
-      groups = parsePattern(h.pattern);
+      alternatives = patternsOf(h).map(parsePattern);
     } catch (e) {
       errors.push(`${h.id}: ${(e as Error).message}`);
       continue;
     }
-    const usedVars = new Set(groups.flatMap((g) => (g.expr.t === 'num' && g.expr.varName ? [g.expr.varName] : [])));
+    const allGroups = alternatives.flat();
+    const usedVars = new Set(allGroups.flatMap((g) => (g.expr.t === 'num' && g.expr.varName ? [g.expr.varName] : [])));
     for (const [v, dom] of Object.entries(h.vars ?? {})) {
       if (!usedVars.has(v)) warnings.push(`${h.id}: variable "${v}" has a domain but is not used`);
       for (const x of dom) {
-        const bad = groups.some(
+        const bad = allGroups.some(
           (g) => g.expr.t === 'num' && g.expr.varName === v && (x + g.expr.offset < 1 || x + g.expr.offset > 9),
         );
         if (bad) errors.push(`${h.id}: value ${v}=${x} puts a tile outside 1–9`);
       }
     }
-    const variants = expandLine(h, groups, '');
+    const variants = expandAlternatives(h, alternatives);
     if (variants.length === 0) errors.push(`${h.id}: pattern has no legal variants`);
+    alternatives.forEach((groups, alt) => {
+      if (!variants.some((v) => v.alt === alt)) {
+        warnings.push(`${h.id}: alternative ${alt + 1} adds no new hands (duplicates an earlier alternative)`);
+      }
+      void groups;
+    });
     for (const v of variants) errors.push(...validateVariant(v));
     variantCount += variants.length;
   }
@@ -323,14 +348,14 @@ export function loadCard(raw: unknown): LoadedCard {
     (a, b) => (catOrder.get(a.category)! - catOrder.get(b.category)!) || a.line - b.line,
   );
   for (const h of sorted) {
-    const groups = parsePattern(h.pattern);
+    const alternatives = patternsOf(h).map(parsePattern);
     const categoryName = categoryById.get(h.category)!.name;
-    const vs = expandLine(h, groups, categoryName);
+    const vs = expandAlternatives(h, alternatives);
     for (const v of vs) {
       v.index = variants.length;
       variants.push(v);
     }
-    lines.push({ ...h, groups, variants: vs, categoryName });
+    lines.push({ ...h, groups: alternatives[0], alternatives, variants: vs, categoryName });
   }
   return {
     def,
@@ -344,10 +369,13 @@ export function loadCard(raw: unknown): LoadedCard {
 }
 
 /** Display string for a pattern, e.g. "FF 1111 2222 3333" (variables shown as their minimum value). */
-export function patternDisplayTokens(line: HandLine): { text: string; suitVar: SuitVar | null; count: number }[] {
+export function patternDisplayTokens(line: HandLine, alt = 0): { text: string; suitVar: SuitVar | null; count: number }[] {
   const domMin: Record<string, number> = {};
-  for (const v of line.variants) for (const [k, n] of Object.entries(v.nums)) domMin[k] = Math.min(domMin[k] ?? 9, n);
-  return line.groups.map((g) => {
+  for (const v of line.variants) {
+    if (v.alt !== alt) continue;
+    for (const [k, n] of Object.entries(v.nums)) domMin[k] = Math.min(domMin[k] ?? 9, n);
+  }
+  return line.alternatives[alt].map((g) => {
     let sym: string;
     const e = g.expr;
     if (e.t === 'lit') sym = e.kind === 'WD' && g.raw.includes('0') ? '0' : e.kind === 'GD' ? 'G' : e.kind === 'RD' ? 'R' : e.kind === 'WD' ? 'Wh' : e.kind;
@@ -372,12 +400,13 @@ export function resolveVariant(
   line: HandLine,
   suits: Partial<Record<SuitVar, Suit>>,
   nums: Record<string, number>,
+  alt = 0,
 ): HandVariant | null {
   const used = Object.values(suits);
   if (new Set(used).size !== used.length) return null;
   let concrete: ConcreteGroup[];
   try {
-    concrete = line.groups.map((g) => ({
+    concrete = line.alternatives[alt].map((g) => ({
       kind: resolveKind(g, suits, nums),
       count: g.count,
       jokerable: line.jokers !== 'none' && g.count >= 3,
@@ -390,12 +419,14 @@ export function resolveVariant(
 }
 
 /** Suit variables and number-variable domains used by a line (for configuration pickers). */
-export function lineVariables(line: HandLine): { suitVars: SuitVar[]; numVars: { name: string; values: number[] }[] } {
-  const suitVars = [...new Set(line.groups.map((g) => g.suitVar).filter((s): s is SuitVar => !!s))].sort();
-  const names = [...new Set(line.variants.flatMap((v) => Object.keys(v.nums)))].sort();
+export function lineVariables(line: HandLine, alt = 0): { suitVars: SuitVar[]; numVars: { name: string; values: number[] }[] } {
+  const groups = line.alternatives[alt];
+  const variants = line.variants.filter((v) => v.alt === alt);
+  const suitVars = [...new Set(groups.map((g) => g.suitVar).filter((s): s is SuitVar => !!s))].sort();
+  const names = [...new Set(variants.flatMap((v) => Object.keys(v.nums)))].sort();
   const numVars = names.map((name) => ({
     name,
-    values: [...new Set(line.variants.map((v) => v.nums[name]))].sort((a, b) => a - b),
+    values: [...new Set(variants.map((v) => v.nums[name]))].sort((a, b) => a - b),
   }));
   return { suitVars, numVars };
 }

@@ -132,7 +132,7 @@ export function App() {
         }}
         onCard={() => setCardOpen(true)}
         onSettings={() => setSettingsOpen(true)}
-        official={card.def.source.official}
+        demoCard={card.def.source.kind === 'demo'}
       />
       <main className="flex-1">
         {screen === 'home' && (
@@ -165,7 +165,8 @@ export function App() {
         )}
       </main>
       <footer className="text-center text-[11px] text-ink-faint py-4 px-4">
-        Mahjong IQ is an independent training tool. {card.def.source.official ? card.def.source.attribution : 'The bundled card is fictional and not affiliated with the National Mah Jongg League.'}
+        Mahjong IQ is an independent training tool, not affiliated with the National Mah Jongg League.{' '}
+        {card.def.source.kind === 'demo' ? 'The bundled card is fictional.' : card.def.source.attribution}
       </footer>
 
       <CardReference
@@ -201,7 +202,7 @@ function Header({
   onHome,
   onCard,
   onSettings,
-  official,
+  demoCard,
 }: {
   screen: Screen;
   round: RoundState | null;
@@ -209,7 +210,7 @@ function Header({
   onHome: () => void;
   onCard: () => void;
   onSettings: () => void;
-  official: boolean;
+  demoCard: boolean;
 }) {
   const inGame = screen !== 'home' && round;
   const steps = round ? stageSteps(round) : [];
@@ -259,7 +260,9 @@ function Header({
           </>
         )}
         <div className={cx('flex items-center gap-1 shrink-0', !inGame && 'ml-auto')}>
-          {!official && <span className="hidden lg:inline text-[11px] text-[#7a5a14] bg-[#fbf3e1] rounded-full px-2 py-0.5 mr-1">Demo card</span>}
+          <span className={cx('hidden lg:inline text-[11px] rounded-full px-2 py-0.5 mr-1', demoCard ? 'text-[#7a5a14] bg-[#fbf3e1]' : 'text-jade-800 bg-jade-50')}>
+            {demoCard ? 'Demo card' : 'Your card'}
+          </span>
           <button type="button" onClick={onCard} className="h-9 px-3 rounded-lg text-sm font-medium text-ink-soft hover:bg-black/5" data-testid="header-card">
             Card
           </button>

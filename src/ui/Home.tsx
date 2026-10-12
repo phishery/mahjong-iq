@@ -70,9 +70,13 @@ export function Home({
               Browse the card
             </Button>
           </div>
-          {!card.def.source.official && (
+          {card.def.source.kind === 'demo' ? (
             <p className="mt-3 text-xs text-[#7a5a14] bg-[#fbf3e1] inline-block rounded-lg px-2.5 py-1.5">
               Using the fictional <strong>{card.def.title}</strong> — not an official NMJL card.
+            </p>
+          ) : (
+            <p className="mt-3 text-xs text-jade-800 bg-jade-50 inline-block rounded-lg px-2.5 py-1.5">
+              Using your imported card: <strong>{card.def.title}</strong>
             </p>
           )}
         </div>

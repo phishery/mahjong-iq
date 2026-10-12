@@ -49,6 +49,21 @@ A pattern is a list of groups separated by spaces. Each group is written `COUNT 
 | `0` | the White Dragon used as zero (year hands) |
 | `:A` `:B` `:C` | suit variables. Different letters must be different suits (they are the card's colours). |
 
+Lines printed with **"-or-"** alternatives use an array of patterns. Each alternative is expanded, and hands shared between alternatives are de-duplicated:
+
+```json
+"pattern": ["21:A 32:A 23:A 34:A 45:A", "25:A 36:A 27:A 38:A 49:A"]
+```
+
+Some patterns from the printed card, translated:
+
+| Card wording | Pattern |
+|---|---|
+| "Any Dragon" when every suit is already used | one alternative per dragon (`2GD`, `2RD`, `2WD`) |
+| "Opp. Dragon" (a dragon that doesn't match the suit) | `4D:B` where `B` is not used by the numbers |
+| "Any Wind" | one alternative per wind |
+| "Pair any odd no., kongs match pair" | `1x:A 11:A 13:A … 4x:B 4x:C` with `"vars": {"x": [1,3,5,7,9]}` |
+
 Optional fields on a hand:
 - `vars`: an explicit domain for a number variable, e.g. `{"x": [1, 3, 5]}`. The default is every value that keeps all its tiles within 1–9.
 - `distinctVars`: defaults to `true`, which means `x` and `y` must differ.
@@ -63,3 +78,5 @@ Joker eligibility comes from the group size, following NMJL practice. Each line 
 3. For each line, write the pattern. Use one suit variable per colour on the printed card, and a number variable wherever the card says "any".
 4. Run `npm run validate-card -- my-card.json`. It checks the structure, that every variant has 14 tiles, the supply limits (pairs and singles can't exceed 4 copies, or 8 for Flowers), the Joker limits, unknown categories and duplicate ids, and it prints variant counts per category.
 5. In the app, open **Card → Load a card → Import card JSON…**.
+
+Keep a transcribed official card in `private-cards/`. That folder is git-ignored, so the card can't be committed to the public repository by accident.

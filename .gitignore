@@ -7,3 +7,9 @@ playwright-report
 *.log
 .DS_Store
 .vercel
+
+# Private card data (copyrighted official card) — never commit
+card.jpeg
+card.jpg
+card.png
+private-cards/

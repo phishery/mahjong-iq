@@ -4,6 +4,7 @@
  * Carlo probabilities.
  */
 
+import { patternsOf } from './card/parser';
 import type { HandVariant, LoadedCard } from './card/schema';
 import { analyzeRack, type Opportunity, type PlayerKnowledge } from './heuristic';
 import type { SimResult, SimTarget } from './simulate';
@@ -66,7 +67,7 @@ function variantCandidate(card: LoadedCard, o: Opportunity): Candidate {
     level: 'variant',
     id: o.variant.id,
     label: variantLabel(card, o.variant),
-    sublabel: line.description ?? line.pattern,
+    sublabel: line.description ?? patternsOf(line).join(" -or- "),
     heuristic: o.score,
     best: o,
     variantCount: 1,
@@ -107,7 +108,7 @@ export function buildCandidates(
         level,
         id: l.id,
         label: lineLabel(card, l.id),
-        sublabel: l.description ?? l.pattern,
+        sublabel: l.description ?? patternsOf(l).join(" -or- "),
         heuristic: best.score,
         best,
         variantCount: l.variants.length,

@@ -16,6 +16,9 @@
  *             | 0            White Dragon used as a zero ("Soap"), e.g. in year hands
  *   SUITVAR  := A | B | C     distinct suits by default (A≠B≠C)
  *
+ * A line printed with "-or-" alternatives uses an array of patterns:
+ *   "pattern": ["2x:A 3x+1:A ...", "2x:A 3x+1:B ..."]
+ *
  * Examples:
  *   "2F 4x:A 4x+1:A 4x+2:A"   FF 1111 2222 3333 — any three consecutive kongs, one suit
  *   "1N 1E 1W 1S 3x:A 3x:B 4x:C" NEWS + like-number pungs/kong in three suits
@@ -51,7 +54,8 @@ export interface HandLineDef {
   category: string;
   /** Line number within its category, as printed on the card. */
   line: number;
-  pattern: string;
+  /** One pattern, or several alternatives printed on the card with "-or-". */
+  pattern: string | string[];
   concealed: boolean;
   value?: number;
   description?: string;
@@ -102,6 +106,8 @@ export interface HandVariant {
   index: number;
   lineId: string;
   categoryId: string;
+  /** Which "-or-" alternative of the line this variant comes from (0-based). */
+  alt: number;
   groups: ConcreteGroup[];
   suits: Partial<Record<SuitVar, Suit>>;
   nums: Record<string, number>;
@@ -116,7 +122,10 @@ export interface HandVariant {
 }
 
 export interface HandLine extends HandLineDef {
+  /** Groups of the first alternative (convenience). */
   groups: PatternGroup[];
+  /** Parsed groups for every "-or-" alternative. */
+  alternatives: PatternGroup[][];
   variants: HandVariant[];
   categoryName: string;
 }
