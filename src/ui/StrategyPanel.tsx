@@ -25,9 +25,26 @@ export interface StrategyPanelProps {
   onSubmit: (picks: Selection[], confidence?: number) => void;
   onFocus: (v: HandVariant | null) => void;
   decisionId: string;
+  /** Called when the player looks at a section or line, so the docked card can follow. */
+  onBrowse?: (categoryId: string, lineId?: string) => void;
+  /** Sections from the previous ranking; the line and exact-hand pickers open on the first. */
+  preferredCategories?: string[];
 }
 
-export function StrategyPanel({ card, level, previous, rack, submitting, askConfidence, onSubmit, onFocus, decisionId }: StrategyPanelProps) {
+export function StrategyPanel({
+  card,
+  level,
+  previous,
+  rack,
+  submitting,
+  askConfidence,
+  onSubmit,
+  onFocus,
+  decisionId,
+  onBrowse = () => {},
+  preferredCategories = [],
+}: StrategyPanelProps) {
+  const startCategory = preferredCategories[0] ?? card.categories[0].id;
   const [picks, setPicks] = useState<Selection[]>([]);
   const [confidence, setConfidence] = useState<number | undefined>(undefined);
   const canRetain = !!previous && previous.length === 3 && previous[0].level === level;
@@ -108,9 +125,11 @@ export function StrategyPanel({ card, level, previous, rack, submitting, askConf
         )}
       </div>
       <div className="border-t border-line flex-1 min-h-0 overflow-y-auto scrollbar-thin px-4 py-3 max-h-[46vh] lg:max-h-none">
-        {level === 'category' && <CategoryPicker card={card} selected={keys} onPick={add} />}
-        {level === 'line' && <LinePicker card={card} selected={keys} onPick={add} />}
-        {level === 'variant' && <VariantPicker card={card} rack={rack} selected={keys} onPick={add} onFocus={onFocus} />}
+        {level === 'category' && <CategoryPicker card={card} selected={keys} onPick={add} onBrowse={onBrowse} />}
+        {level === 'line' && <LinePicker key={decisionId} card={card} selected={keys} onPick={add} onBrowse={onBrowse} startCategory={startCategory} />}
+        {level === 'variant' && (
+          <VariantPicker key={decisionId} card={card} rack={rack} selected={keys} onPick={add} onFocus={onFocus} onBrowse={onBrowse} startCategory={startCategory} />
+        )}
       </div>
       <div className="border-t border-line p-4 space-y-3">
         {askConfidence && (
@@ -141,7 +160,9 @@ export function StrategyPanel({ card, level, previous, rack, submitting, askConf
   );
 }
 
-function CategoryPicker({ card, selected, onPick }: { card: LoadedCard; selected: string[]; onPick: (s: Selection) => void }) {
+type Browse = (categoryId: string, lineId?: string) => void;
+
+function CategoryPicker({ card, selected, onPick, onBrowse }: { card: LoadedCard; selected: string[]; onPick: (s: Selection) => void; onBrowse: Browse }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-2" data-testid="category-picker">
       {card.categories.map((c) => {
@@ -152,7 +173,10 @@ function CategoryPicker({ card, selected, onPick }: { card: LoadedCard; selected
           <button
             type="button"
             key={c.id}
-            onClick={() => onPick({ level: 'category', id: c.id })}
+            onClick={() => {
+              onPick({ level: 'category', id: c.id });
+              onBrowse(c.id);
+            }}
             disabled={idx >= 0}
             data-testid={`pick-category-${c.id}`}
             className={cx(
@@ -176,15 +200,35 @@ function CategoryPicker({ card, selected, onPick }: { card: LoadedCard; selected
   );
 }
 
-function LinePicker({ card, selected, onPick }: { card: LoadedCard; selected: string[]; onPick: (s: Selection) => void }) {
-  const [cat, setCat] = useState(card.categories[0].id);
+function LinePicker({
+  card,
+  selected,
+  onPick,
+  onBrowse,
+  startCategory,
+}: {
+  card: LoadedCard;
+  selected: string[];
+  onPick: (s: Selection) => void;
+  onBrowse: Browse;
+  startCategory: string;
+}) {
+  const [cat, setCat] = useState(startCategory);
   return (
     <div data-testid="line-picker">
       <div className="flex flex-wrap gap-1.5 mb-3">
         {card.categories.map((c) => {
           const n = selected.filter((k) => k.startsWith('line:') && card.lineById.get(k.slice(5))?.category === c.id).length;
           return (
-            <Chip key={c.id} active={cat === c.id} onClick={() => setCat(c.id)} className="h-7 text-xs">
+            <Chip
+              key={c.id}
+              active={cat === c.id}
+              onClick={() => {
+                setCat(c.id);
+                onBrowse(c.id);
+              }}
+              className="h-7 text-xs"
+            >
               {c.name}
               {n > 0 && <span className="ml-1 text-[10px]">•{n}</span>}
             </Chip>
@@ -202,7 +246,10 @@ function LinePicker({ card, selected, onPick }: { card: LoadedCard; selected: st
                 type="button"
                 key={l.id}
                 disabled={idx >= 0}
-                onClick={() => onPick({ level: 'line', id: l.id })}
+                onClick={() => {
+                  onPick({ level: 'line', id: l.id });
+                  onBrowse(l.category, l.id);
+                }}
                 data-testid={`pick-line-${l.id}`}
                 className={cx(
                   'w-full text-left rounded-xl border px-3 py-2 transition-colors',
@@ -231,14 +278,18 @@ function VariantPicker({
   selected,
   onPick,
   onFocus,
+  onBrowse,
+  startCategory,
 }: {
   card: LoadedCard;
   rack: number[];
   selected: string[];
   onPick: (s: Selection) => void;
   onFocus: (v: HandVariant | null) => void;
+  onBrowse: Browse;
+  startCategory: string;
 }) {
-  const [cat, setCat] = useState(card.categories[0].id);
+  const [cat, setCat] = useState(startCategory);
   const [lineId, setLineId] = useState<string | null>(null);
   const line = lineId ? card.lineById.get(lineId)! : null;
   return (
@@ -251,6 +302,7 @@ function VariantPicker({
             onClick={() => {
               setCat(c.id);
               setLineId(null);
+              onBrowse(c.id);
             }}
             className="h-7 text-xs"
           >
@@ -266,7 +318,10 @@ function VariantPicker({
               <button
                 type="button"
                 key={l.id}
-                onClick={() => setLineId(l.id)}
+                onClick={() => {
+                  setLineId(l.id);
+                  onBrowse(l.category, l.id);
+                }}
                 data-testid={`open-line-${l.id}`}
                 className="w-full text-left rounded-xl border border-line bg-white hover:border-jade-300 px-3 py-2"
               >

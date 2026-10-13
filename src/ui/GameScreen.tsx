@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { HandVariant, LoadedCard } from '../engine/card/schema';
 import { RULES } from '../engine/charleston';
 import { currentLevel, decisionLabel } from '../engine/game';
 import { simSettingsFrom, type Settings } from './lib';
 import { countsFromIds, JOKER_INDEX, KIND_OF_ID, type TileId } from '../engine/tiles';
 import { mixSeed } from '../engine/rng';
-import { Button, Chip, cx, Panel, Segmented } from './components';
+import { CardDock } from './CardDock';
+import type { CardFilter } from './CardHands';
+import { Button, Chip, cx, Panel, Segmented, useMediaQuery } from './components';
 import { Rack } from './Rack';
 import { FeedbackPanel, LastPassCard, RankingReview } from './Review';
 import { StrategyPanel } from './StrategyPanel';
@@ -64,6 +66,43 @@ export function GameScreen({
   const prevDecision = round.decisions.length >= 2 ? round.decisions[round.decisions.length - 2] : undefined;
   const lastPass = round.passes[round.passes.length - 1];
   const rackCounts = useMemo(() => countsFromIds(round.racks.you), [round.racks.you]);
+  // Card docked under the rack on larger screens (phones keep the drawer).
+  const docked = useMediaQuery('(min-width: 1024px)');
+  const dockRef = useRef<HTMLElement>(null);
+  const ranking = round.phase === 'rank';
+  const [dockOpen, setDockOpen] = useState(true);
+  const [dockFilter, setDockFilter] = useState<CardFilter>('all');
+  const [dockLine, setDockLine] = useState<string | null>(null);
+  /** Sections from the most recent ranking, in the order they were ranked. */
+  const mySections = useMemo(() => {
+    const d = round.decisions[round.decisions.length - 1];
+    const ids = (d?.picks ?? []).map((p) =>
+      p.level === 'category' ? p.id : p.level === 'line' ? card.lineById.get(p.id)?.category : card.variantById.get(p.id)?.categoryId,
+    );
+    return [...new Set(ids.filter((id): id is string => !!id))];
+  }, [round.decisions, card]);
+  useEffect(() => {
+    // Open the card for each new ranking (on your sections once you have some); fold it for the analysis.
+    setDockOpen(ranking);
+    setDockLine(null);
+    if (ranking) setDockFilter(level !== 'category' && mySections.length ? 'mine' : 'all');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ranking, round.decisions.length]);
+  const browseCard = useCallback(
+    (categoryId: string, lineId?: string) => {
+      // A line inside "Your sections" is outlined in place rather than narrowing the card.
+      setDockFilter((f) => (lineId && f === 'mine' && mySections.includes(categoryId) ? f : categoryId));
+      setDockLine(lineId ?? null);
+      setDockOpen(true);
+    },
+    [mySections],
+  );
+  const openCard = () => {
+    if (!docked) return onOpenCard();
+    setDockOpen(true);
+    requestAnimationFrame(() => dockRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  };
+
   const jokerIds = useMemo(() => new Set(round.racks.you.filter((id) => KIND_OF_ID[id] === JOKER_INDEX)), [round.racks.you]);
 
   // In review/pass phases, highlight the player's #1 (or the engine's best) hand to support passing.
@@ -151,7 +190,7 @@ export function GameScreen({
                   ]}
                 />
               )}
-              <Button variant="secondary" size="sm" onClick={onOpenCard} data-testid="open-card">
+              <Button variant="secondary" size="sm" onClick={openCard} data-testid="open-card">
                 Card
               </Button>
             </div>
@@ -206,6 +245,24 @@ export function GameScreen({
             Tip: before choosing, count your pairs, Jokers and Flowers, and notice which suit you hold most. Then ask which card sections use those tiles.
           </p>
         )}
+        {docked && (
+          <CardDock
+            ref={dockRef}
+            card={card}
+            rack={rackCounts}
+            revealCounts={!ranking}
+            onFocus={setFocus}
+            open={dockOpen}
+            onToggle={() => setDockOpen((o) => !o)}
+            filter={dockFilter}
+            onFilter={(f) => {
+              setDockFilter(f);
+              setDockLine(null);
+            }}
+            mine={mySections}
+            highlightLineId={dockLine}
+          />
+        )}
       </div>
 
       <aside className="lg:sticky lg:top-[72px] lg:max-h-[calc(100vh-88px)] flex flex-col min-h-0">
@@ -220,6 +277,8 @@ export function GameScreen({
             onSubmit={game.rank}
             onFocus={setFocus}
             decisionId={`${round.startedAt}-${round.decisions.length}`}
+            onBrowse={browseCard}
+            preferredCategories={level === 'category' ? [] : mySections}
           />
         ) : (
           last && <RankingReview card={card} decision={last} simSettings={simSettings} />
@@ -273,7 +332,7 @@ function ActionBar({
     return (
       <div className={base}>
         <span className="text-sm text-ink-soft">
-          Rank your top three {level === 'category' ? 'categories' : level === 'line' ? 'card lines' : 'exact hands'} in the panel <span className="hidden lg:inline">on the right</span>
+          Rank your top three {level === 'category' ? 'categories' : level === 'line' ? 'card lines' : 'exact hands'} in the panel <span className="hidden lg:inline">on the right, using the card below</span>
           <span className="lg:hidden">below</span>. You’ll pass tiles after you lock it in.
         </span>
       </div>

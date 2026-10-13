@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { Basis } from '../engine/analysis';
 import type { HandLine, HandVariant, SuitVar } from '../engine/card/schema';
 import { patternDisplayTokens } from '../engine/card/parser';
@@ -6,6 +6,19 @@ import { matchVariant } from '../engine/evaluator';
 import type { SimResult } from '../engine/simulate';
 import { type Counts, type TileKind } from '../engine/tiles';
 import { Tile } from './Tile';
+
+/** Tracks a CSS media query, e.g. the desktop breakpoint. */
+export function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
+    onChange();
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+}
 
 export function cx(...xs: (string | false | null | undefined)[]) {
   return xs.filter(Boolean).join(' ');
