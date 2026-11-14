@@ -49,12 +49,15 @@ export function Report({
   progress,
   onAgain,
   onHome,
+  onPlayHand,
 }: {
   card: LoadedCard;
   round: RoundState;
   progress: ProgressData;
   onAgain: () => void;
   onHome: () => void;
+  /** Continue this Charleston as a live game against three computer players. */
+  onPlayHand?: () => void;
 }) {
   const report = useMemo(() => buildReport(card, round), [card, round]);
   const [step, setStep] = useState(0);
@@ -110,6 +113,11 @@ export function Report({
           <Button onClick={onAgain} data-testid="play-again" autoFocus>
             Play again →
           </Button>
+          {onPlayHand && (
+            <Button variant="secondary" onClick={onPlayHand} data-testid="report-play-hand">
+              Play this hand →
+            </Button>
+          )}
           <Button variant="secondary" onClick={onHome}>
             Change mode
           </Button>

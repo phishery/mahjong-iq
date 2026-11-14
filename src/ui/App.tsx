@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { loadCard, validateCard } from '../engine/card/parser';
 import type { HandVariant, LoadedCard } from '../engine/card/schema';
 import { DEMO_CARD_JSON, getDemoCard } from '../engine/cards';
 import { MODE_INFO, type RoundState } from '../engine/game';
 import { emptyProgress, pickPracticeCategory, type ProgressData } from '../engine/progress';
 import { createRng, randomSeed } from '../engine/rng';
+import { tableFromRound, type SeatIndex, type TableState } from '../engine/table';
 import { countsFromIds } from '../engine/tiles';
 import { CardReference } from './CardReference';
 import { cx } from './components';
@@ -27,7 +28,24 @@ import {
 import { Report } from './Report';
 import { useGame } from './useGame';
 
-type Screen = 'home' | 'game' | 'report';
+// The game table is loaded on demand so the trainer stays light.
+const SoloTable = lazy(() => import('./table/SoloTable').then((m) => ({ default: m.SoloTable })));
+const OnlineScreen = lazy(() => import('./table/OnlineScreen').then((m) => ({ default: m.OnlineScreen })));
+
+type Screen = 'home' | 'game' | 'report' | 'play' | 'online';
+
+const BOT_NAMES = ['Mei', 'Rosa', 'Ada'];
+
+/** A finished round that covered the whole first Charleston can be played out as a live game. */
+const canPlayOut = (r: RoundState | null) => !!r && r.phase === 'done' && (r.config.length === 'first' || r.config.length === 'full');
+
+/** Invite links: …/#room=CODE opens the online table with the code filled in. */
+function takeRoomFromHash(): string | null {
+  const m = /^#room=([A-Za-z0-9]{4,8})$/.exec(typeof location !== 'undefined' ? location.hash : '');
+  if (!m) return null;
+  history.replaceState(null, '', location.pathname + location.search);
+  return m[1].toUpperCase();
+}
 
 function initialCard(): { card: LoadedCard; json: unknown; custom: boolean } {
   const custom = loadCustomCard();
@@ -55,7 +73,12 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [progressOpen, setProgressOpen] = useState(false);
   const [focus, setFocus] = useState<HandVariant | null>(null);
+  const [solo, setSolo] = useState<{ state: TableState; you: SeatIndex } | null>(null);
+  const [roomCode] = useState(takeRoomFromHash);
   const sessionStart = useRef(loadProgress().history.length);
+  useEffect(() => {
+    if (roomCode) setScreen('online');
+  }, [roomCode]);
 
   const simRef = useRef<SimClient | null>(null);
   if (!simRef.current && typeof Worker !== 'undefined') simRef.current = new SimClient(cardJson, card.def.id);
@@ -143,6 +166,13 @@ export function App() {
       .catch((e: Error) => setNotice({ ok: false, text: e.message }));
   }, []);
 
+  const playHand = useCallback(() => {
+    if (!round || !canPlayOut(round)) return;
+    setSolo(tableFromRound(card, round, { playerName: 'You', profile: settings.opponents, botNames: BOT_NAMES }));
+    setFocus(null);
+    setScreen('play');
+  }, [round, card, settings.opponents]);
+
   const rackCounts = useMemo(() => (round ? countsFromIds(round.racks.you) : null), [round]);
   const anim = settings.animations === 'off' ? 'no-anim' : '';
 
@@ -183,6 +213,7 @@ export function App() {
             onOpenCard={() => openCard()}
             onUnlockCard={() => openCard('source')}
             onOpenProgress={() => setProgressOpen(true)}
+            onPlayOnline={() => setScreen('online')}
             sessionStart={sessionStart.current}
           />
         )}
@@ -195,13 +226,28 @@ export function App() {
             onReport={() => setScreen('report')}
             onNextRack={again}
             onOpenCard={() => openCard()}
+            onPlayHand={canPlayOut(round) ? playHand : undefined}
             focus={focus}
             setFocus={setFocus}
           />
         )}
         {screen === 'report' && round && (
-          <Report card={card} round={round} progress={progress} onAgain={again} onHome={() => setScreen('home')} />
+          <Report card={card} round={round} progress={progress} onAgain={again} onHome={() => setScreen('home')} onPlayHand={canPlayOut(round) ? playHand : undefined} />
         )}
+        <Suspense fallback={<p className="text-center text-sm text-ink-faint py-10">Setting up the table…</p>}>
+          {screen === 'play' && solo && (
+            <SoloTable
+              card={card}
+              initial={solo.state}
+              you={solo.you}
+              showLabels={settings.tileLabels}
+              fast={settings.animations !== 'normal'}
+              onReport={round ? () => setScreen('report') : undefined}
+              onNewRound={again}
+            />
+          )}
+          {screen === 'online' && <OnlineScreen initialCode={roomCode} showLabels={settings.tileLabels} onHome={() => setScreen('home')} />}
+        </Suspense>
       </main>
       <footer className="text-center text-[11px] text-ink-faint py-4 px-4">
         Mahjong IQ is an independent training tool, not affiliated with the National Mah Jongg League.{' '}
@@ -252,7 +298,7 @@ function Header({
   onSettings: () => void;
   demoCard: boolean;
 }) {
-  const inGame = screen !== 'home' && round;
+  const inGame = (screen === 'game' || screen === 'report') && round;
   const steps = round ? stageSteps(round) : [];
   const credit = round && round.decisions.length ? round.decisions.reduce((a, d) => a + d.grade.credit, 0) / round.decisions.length : null;
   return (

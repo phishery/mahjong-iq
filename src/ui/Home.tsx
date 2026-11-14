@@ -35,6 +35,7 @@ export function Home({
   onOpenCard,
   onUnlockCard,
   onOpenProgress,
+  onPlayOnline,
   sessionStart,
 }: {
   card: LoadedCard;
@@ -45,6 +46,7 @@ export function Home({
   onOpenCard: () => void;
   onUnlockCard: () => void;
   onOpenProgress: () => void;
+  onPlayOnline: () => void;
   sessionStart: number;
 }) {
   const [targets, setTargets] = useState<string[]>([]);
@@ -236,6 +238,18 @@ export function Home({
           </div>
         </Panel>
       </div>
+
+      <Panel title="Play a full game">
+        <div className="px-4 pb-4 flex flex-wrap items-center gap-4">
+          <p className="text-sm text-ink-soft flex-1 min-w-[16rem]">
+            Take the Charleston all the way to Mahjong: draws, discards, calls, Joker swaps and scoring. Play with up to three friends online — computer
+            players fill the empty seats. You can also play out any finished Full or Quick round against three computer players from its round end.
+          </p>
+          <Button variant="secondary" onClick={onPlayOnline} data-testid="home-play-online">
+            Play online →
+          </Button>
+        </div>
+      </Panel>
     </div>
   );
 }

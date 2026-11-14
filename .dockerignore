@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.vercel
+test-results
+playwright-report
+private-cards
+card.jpeg
+card.jpg
+card.png
+nmjl-2026.json
+.env
+.env.*

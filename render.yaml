@@ -1,0 +1,21 @@
+# Render Blueprint for the Mahjong IQ game server (online play).
+# The web app itself is on Vercel; it finds this server through VITE_GAME_SERVER_URL.
+services:
+  - type: web
+    name: mahjong-iq-server
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    # Games live in memory, so only redeploy when server code changes.
+    buildFilter:
+      paths:
+        - server/**
+        - src/engine/**
+        - src/net/**
+        - Dockerfile
+        - package.json
+        - package-lock.json
+    envVars:
+      - key: ALLOWED_ORIGINS
+        value: https://mahjong-iq.vercel.app

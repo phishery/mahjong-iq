@@ -26,6 +26,7 @@ export function GameScreen({
   onReport,
   onNextRack,
   onOpenCard,
+  onPlayHand,
   focus,
   setFocus,
 }: {
@@ -36,6 +37,8 @@ export function GameScreen({
   onReport: () => void;
   onNextRack: () => void;
   onOpenCard: () => void;
+  /** Continue the finished Charleston as a live game against three computer players. */
+  onPlayHand?: () => void;
   focus: HandVariant | null;
   setFocus: (v: HandVariant | null) => void;
 }) {
@@ -226,6 +229,7 @@ export function GameScreen({
             }}
             onReport={onReport}
             onNextRack={onNextRack}
+            onPlayHand={onPlayHand}
             level={level}
             drill={drill}
           />
@@ -302,10 +306,12 @@ function ActionBar({
   setBlind,
   onReport,
   onNextRack,
+  onPlayHand,
   level,
   drill,
 }: {
   game: GameApi;
+  onPlayHand?: () => void;
   step: { label: string; direction: 'right' | 'across' | 'left'; blindAllowed: boolean } | null;
   selected: TileId[];
   required: number;
@@ -440,9 +446,16 @@ function ActionBar({
               </Button>
             </>
           ) : (
-            <Button onClick={onReport} data-testid="see-report" autoFocus>
-              See round report →
-            </Button>
+            <>
+              {onPlayHand && (
+                <Button variant="secondary" onClick={onPlayHand} data-testid="play-hand">
+                  Play this hand →
+                </Button>
+              )}
+              <Button onClick={onReport} data-testid="see-report" autoFocus>
+                See round report →
+              </Button>
+            </>
           )}
         </span>
       </div>
