@@ -237,4 +237,32 @@ describe('Game server over WebSocket', () => {
       await srv.close();
     }
   });
+
+  it('locks out passcode guessing after too many wrong tries, even in parallel', async () => {
+    const srv = await startServer({
+      port: 0,
+      timing,
+      cardJson: JSON.stringify(DEMO_CARD_JSON),
+      cardPasscode: '1234',
+      failureDelayMs: 5,
+      passcodeLimits: { perAddress: 3, total: 10, windowMs: 60_000 },
+    });
+    try {
+      const a = client(srv.port);
+      await a.open;
+      // Five guesses at once: only three are checked, the rest are refused.
+      for (let i = 0; i < 5; i++) a.send({ t: 'create', name: 'X', playerId: 'player-cccc-3', passcode: `000${i}` });
+      await a.until((m) => m.t === 'error' && /Too many/.test(m.message));
+      const wrong = () => a.msgs.filter((m) => m.t === 'error' && /isn’t right/.test(m.message)).length;
+      await new Promise((r) => setTimeout(r, 50));
+      expect(wrong()).toBe(3);
+      // Now even the right passcode is refused from this address until the window ends.
+      a.send({ t: 'create', name: 'X', playerId: 'player-cccc-3', passcode: '1234' });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(a.msgs.some((m) => m.t === 'joined')).toBe(false);
+      a.ws.close();
+    } finally {
+      await srv.close();
+    }
+  });
 });

@@ -120,7 +120,7 @@ The server is a small Node process (`server/`) that owns every online game. Brow
 |---|---|
 | `PORT` | Listen port (default 8787) |
 | `ALLOWED_ORIGINS` | Comma-separated browser origins allowed to connect, e.g. `https://mahjong-iq.vercel.app` (default: any) |
-| `CARD_JSON`, `CARD_PASSCODE` | Optional private card. A host who enters the passcode creates a room that uses it, and everyone at that table receives the card. Never committed or baked into the image. |
+| `CARD_JSON`, `CARD_PASSCODE` | Optional private card. A host who enters the passcode creates a room that uses it, and everyone at that table receives the card. Never committed or baked into the image. Wrong passcodes are limited to 5 per address and 30 in total every 15 minutes. |
 
 Then set `VITE_GAME_SERVER_URL=wss://<server-host>/ws` in the Vercel project and redeploy. Without it, the site's **Play online** screen explains that online play isn't set up; during `npm run dev` it connects to `ws://localhost:8787/ws`.
 

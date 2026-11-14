@@ -28,11 +28,48 @@ export interface ServerOptions {
   /** Rooms with nobody connected are closed after this long. */
   idleRoomMs?: number;
   log?: (msg: string) => void;
+  /** Wrong-passcode limits (defaults: 5 per address and 30 in total per 15 minutes). */
+  passcodeLimits?: { perAddress: number; total: number; windowMs: number };
+  /** Pause before answering a wrong passcode. */
+  failureDelayMs?: number;
 }
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const MAX_MSGS_PER_10S = 120;
-const FAILURE_DELAY_MS = 1000;
+const DEFAULT_PASSCODE_LIMITS = { perAddress: 5, total: 30, windowMs: 15 * 60_000 };
+
+/**
+ * Counts wrong passcodes in a fixed window, per address and in total. The total cap matters
+ * because addresses can be spoofed or rotated: with a short passcode, it is what keeps
+ * guessing slow (30 guesses per 15 minutes at most).
+ */
+class PasscodeGuard {
+  private byAddress = new Map<string, number>();
+  private total = 0;
+  private windowStart: number;
+  constructor(
+    private readonly limits: { perAddress: number; total: number; windowMs: number },
+    private readonly now: () => number,
+  ) {
+    this.windowStart = now();
+  }
+  private roll() {
+    if (this.now() - this.windowStart >= this.limits.windowMs) {
+      this.windowStart = this.now();
+      this.byAddress.clear();
+      this.total = 0;
+    }
+  }
+  locked(address: string): boolean {
+    this.roll();
+    return this.total >= this.limits.total || (this.byAddress.get(address) ?? 0) >= this.limits.perAddress;
+  }
+  fail(address: string): void {
+    this.roll();
+    this.total++;
+    this.byAddress.set(address, (this.byAddress.get(address) ?? 0) + 1);
+  }
+}
 
 const digest = (s: string) => createHash('sha256').update(s).digest();
 
@@ -48,6 +85,8 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
   const maxRooms = opts.maxRooms ?? 500;
   const idleRoomMs = opts.idleRoomMs ?? 15 * 60_000;
   const log = opts.log ?? (() => {});
+  const failureDelayMs = opts.failureDelayMs ?? 1000;
+  const guard = new PasscodeGuard(opts.passcodeLimits ?? DEFAULT_PASSCODE_LIMITS, () => clock.now());
   const rooms = new Map<string, Room>();
   /** Open sockets per room and player (a person may have several tabs). */
   const sockets = new Map<string, Map<string, Set<WebSocket>>>();
@@ -91,7 +130,10 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
     verifyClient: ({ origin }: { origin: string }) => !opts.allowedOrigins?.length || opts.allowedOrigins.includes(origin),
   });
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
+    // Behind Render's proxy the client address is the first X-Forwarded-For entry.
+    const forwarded = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim();
+    const address = forwarded || req.socket.remoteAddress || 'unknown';
     let roomCode: string | null = null;
     let playerId: string | null = null;
     let windowStart = clock.now();
@@ -145,8 +187,11 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
             const expected = opts.cardPasscode;
             const off = officialCard();
             if (!expected || !off) return fail('No private card is configured on this server.');
+            if (guard.locked(address)) return fail('Too many wrong passcodes — try again in 15 minutes.');
             if (!timingSafeEqual(digest(msg.passcode.trim()), digest(expected))) {
-              await new Promise((r) => setTimeout(r, FAILURE_DELAY_MS));
+              guard.fail(address); // counted before the pause, so parallel guesses can't slip past
+              log(`wrong card passcode from ${address}`);
+              await new Promise((r) => setTimeout(r, failureDelayMs));
               return fail('That passcode isn’t right.');
             }
             card = off.card;
