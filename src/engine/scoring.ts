@@ -7,9 +7,15 @@
  * 18% when the best is 19% earns ~92% credit while choosing 4% earns ~10%. With simulated
  * probabilities γ = 1.5. With heuristic scores (a 4th-root transform of an approximate
  * probability) γ = 3, which is gentler than the exact equivalent to allow for heuristic noise.
+ *
+ * Ties: simulated probabilities are estimates. Two candidates whose gap is within the 95%
+ * margin of error (see isTie) are treated as equal: a pick tied with the best option for its
+ * slot earns full credit, ordering two tied picks either way is correct, ranks are shared,
+ * and a tied alternative is not reported as "overlooked".
  */
 
 import {
+  isTie,
   metricOf,
   neededKinds,
   rankedBy,
@@ -18,6 +24,7 @@ import {
   type Candidate,
   type DecisionAnalysis,
   type Selection,
+  tieRank,
 } from './analysis';
 
 export const STRATEGY_POINTS = 70;
@@ -33,8 +40,10 @@ export interface PickResult {
   selection: Selection;
   key: string;
   value: number;
-  /** 1-based rank of this pick among all candidates under the grading basis. */
+  /** 1-based rank of this pick under the grading basis; candidates within the margin of error share a rank. */
   rank: number;
+  /** Another candidate shares this rank (statistical tie). */
+  rankShared: boolean;
   credit: number;
   candidate: Candidate | null;
 }
@@ -52,6 +61,10 @@ export interface RankingGrade {
   picks: PickResult[];
   orderCredit: number;
   top: Candidate[];
+  /** Tie-aware rank of every candidate, by key. */
+  ranks: Record<string, number>;
+  /** Candidates outside the top three that are statistically tied with a top-three entry. */
+  alsoTied: Candidate[];
   recognized: string[];
   overlooked: Candidate[];
   yourFlexibility: Flexibility;
@@ -81,23 +94,32 @@ export function gradeRanking(an: DecisionAnalysis, picks: Selection[], basis: Ba
   const values = ordered.map((c) => metricOf(c, basis));
   const gamma = gammaFor(basis);
 
+  const ranks: Record<string, number> = {};
+  for (const c of ordered) ranks[c.key] = tieRank(an, c, basis);
+  const rankCount = new Map<number, number>();
+  for (const r of Object.values(ranks)) rankCount.set(r, (rankCount.get(r) ?? 0) + 1);
+
   const results: PickResult[] = picks.map((s, i) => {
     const key = keys[i];
     const cand = an.byKey.get(key) ?? null;
     if (cand && cand.level !== s.level) throw new Error('Selection level mismatch');
     const value = cand ? metricOf(cand, basis) : 0;
-    const rank = cand ? ordered.findIndex((c) => c.key === key) + 1 : ordered.length + 1;
+    const rank = cand ? ranks[key] : ordered.length + 1;
+    const slotBest = ordered[i];
     const bestForSlot = values[i] ?? 0;
-    const ratio = bestForSlot > 0 ? Math.min(1, value / bestForSlot) : 1;
-    return { selection: s, key, value, rank, credit: Math.pow(ratio, gamma), candidate: cand };
+    const tied = !!cand && !!slotBest && isTie(cand, slotBest, basis);
+    const ratio = tied ? 1 : bestForSlot > 0 ? Math.min(1, value / bestForSlot) : 1;
+    return { selection: s, key, value, rank, rankShared: !!cand && (rankCount.get(rank) ?? 0) > 1, credit: Math.pow(ratio, gamma), candidate: cand };
   });
 
-  // Prioritisation: fraction of the three pairs ordered consistently with their values.
+  // Prioritisation: fraction of the three pairs ordered consistently with their values
+  // (a statistical tie may be ordered either way).
+  const inOrder = (a: PickResult, b: PickResult) =>
+    a.value >= b.value - 1e-12 || (!!a.candidate && !!b.candidate && isTie(a.candidate, b.candidate, basis));
   let good = 0;
-  const pv = results.map((r) => r.value);
-  if (pv[0] >= pv[1] - 1e-12) good++;
-  if (pv[0] >= pv[2] - 1e-12) good++;
-  if (pv[1] >= pv[2] - 1e-12) good++;
+  if (inOrder(results[0], results[1])) good++;
+  if (inOrder(results[0], results[2])) good++;
+  if (inOrder(results[1], results[2])) good++;
   const orderCredit = good / 3;
 
   const credit =
@@ -108,8 +130,19 @@ export function gradeRanking(an: DecisionAnalysis, picks: Selection[], basis: Ba
 
   const top = ordered.slice(0, 3);
   const topKeys = new Set(top.map((c) => c.key));
-  const recognized = keys.filter((k) => topKeys.has(k));
-  const overlooked = top.filter((c) => !keys.includes(c.key));
+  // A pick is recognised when it is statistically in the top three, even if the point
+  // estimates put it 4th or lower.
+  const recognized = keys.filter((k) => ranks[k] !== undefined && ranks[k] <= 3);
+  // A top-three entry you skipped is not "overlooked" if you picked something tied with it instead.
+  const substitutes = results.filter((r) => r.candidate && recognized.includes(r.key) && !topKeys.has(r.key)).map((r) => r.candidate!);
+  const overlooked = top.filter((c) => {
+    if (keys.includes(c.key)) return false;
+    const j = substitutes.findIndex((p) => isTie(p, c, basis));
+    if (j < 0) return true;
+    substitutes.splice(j, 1);
+    return false;
+  });
+  const alsoTied = ordered.slice(3).filter((c) => ranks[c.key] <= 3);
   const pickedCands = results.map((r) => r.candidate).filter((c): c is Candidate => !!c);
 
   return {
@@ -118,6 +151,8 @@ export function gradeRanking(an: DecisionAnalysis, picks: Selection[], basis: Ba
     picks: results,
     orderCredit,
     top,
+    ranks,
+    alsoTied,
     recognized,
     overlooked,
     yourFlexibility: flexibilityOf(pickedCands),

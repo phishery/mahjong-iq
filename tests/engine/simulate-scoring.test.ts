@@ -38,10 +38,23 @@ describe('Monte Carlo engine — validation against exact combinatorics', () => 
     expect(r.hi).toBeGreaterThanOrEqual(exact);
   });
 
-  it('calls model: Mahjong may be called on any discard (4 looks per turn)', () => {
-    const [r] = simulate(card, { rack, knownElsewhere: emptyCounts(), targets: [{ key: 'a', variantIndices: [v.index] }], draws: 10, trials: 20000, seed: 4, model: 'calls' });
+  it('random-calls model: Mahjong may be called on any discard (4 looks per turn)', () => {
+    const [r] = simulate(card, { rack, knownElsewhere: emptyCounts(), targets: [{ key: 'a', variantIndices: [v.index] }], draws: 10, trials: 20000, seed: 4, model: 'random-calls' });
     const exact = atLeastOne(pool, 3, 40);
     expect(Math.abs(r.p - exact)).toBeLessThan(4 * Math.sqrt((exact * (1 - exact)) / 20000));
+  });
+
+  it('calls model: opponents throw high-demand tiles (Flowers) less and low-demand tiles (Winds) more', () => {
+    const run = (r: number[], vi: number, model: 'calls' | 'random-calls') =>
+      simulate(card, { rack: r, knownElsewhere: emptyCounts(), targets: [{ key: 'a', variantIndices: [vi] }], draws: 10, trials: 20000, seed: 7, model })[0].p;
+    // RN-3 (FF 1111 2222 3333) waiting on the second Flower of the pair.
+    const flowerRack = rackOf('F 1B 1B 1B 1B 2B 2B 2B 2B 3B 3B 3B 3B');
+    const flower = variantByLabel('RN-3', { x: 1, A: 'B' }).index;
+    // LK-3 (N E W S 333 333 3333) waiting on the single North.
+    const windRack = rackOf('E W S 3B 3B 3B 3C 3C 3C 3D 3D 3D 3D');
+    const wind = card.lineById.get('LK-3')!.variants.find((v) => v.nums.x === 3 && v.suits.C === 'D')!.index;
+    expect(run(flowerRack, flower, 'calls')).toBeLessThan(run(flowerRack, flower, 'random-calls') - 0.02);
+    expect(run(windRack, wind, 'calls')).toBeGreaterThan(run(windRack, wind, 'random-calls') + 0.02);
   });
 
   it('jokers count as outs for a missing pung/kong tile', () => {
@@ -119,6 +132,41 @@ describe('scoring', () => {
     const c = an.candidates.map((x) => ({ level: x.level, id: x.id }));
     expect(gradeRanking(an, [c[0], c[1], c[2]], 'simulation').orderCredit).toBe(1);
     expect(gradeRanking(an, [c[2], c[1], c[0]], 'simulation').orderCredit).toBe(0);
+  });
+
+  it('treats picks within the margin of error as ties', () => {
+    // 10,000 trials each: 10.8% vs 10.6% is a tie; 10.6% vs 6.8% is not.
+    const an = fakeAnalysis([0.237, 0.108, 0.106, 0.105, 0.068]);
+    const c = an.candidates.map((x) => ({ level: x.level, id: x.id }));
+    // Picking the 4th-by-point-estimate candidate (tied with #2 and #3) instead of #3.
+    const g = gradeRanking(an, [c[0], c[1], c[3]], 'simulation');
+    expect(g.picks[2].credit).toBe(1);
+    expect(g.picks[2].rank).toBe(2);
+    expect(g.picks[2].rankShared).toBe(true);
+    expect(g.recognized).toHaveLength(3);
+    expect(g.overlooked).toHaveLength(0);
+    expect(g.credit).toBeCloseTo(1);
+    // Swapping the order of two tied picks keeps full order credit.
+    expect(gradeRanking(an, [c[0], c[2], c[1]], 'simulation').orderCredit).toBe(1);
+    // A clearly weaker pick is not a tie.
+    const weak = gradeRanking(an, [c[0], c[1], c[4]], 'simulation');
+    expect(weak.picks[2].credit).toBeLessThan(1);
+    expect(weak.picks[2].rank).toBe(5);
+    expect(weak.overlooked.map((x) => x.key)).toEqual([an.candidates[2].key]);
+    expect(weak.alsoTied.map((x) => x.key)).toEqual([an.candidates[3].key]);
+  });
+
+  it('does not call ties when the simulation is precise enough to separate them', () => {
+    const base = fakeAnalysis([0.237, 0.108, 0.106]);
+    const precise: DecisionAnalysis = {
+      ...base,
+      candidates: base.candidates.map((x) => ({ ...x, sim: { ...x.sim!, trials: 10_000_000, successes: Math.round(x.sim!.p * 1e7) } })),
+    };
+    precise.byKey = new Map(precise.candidates.map((x) => [x.key, x]));
+    const c = precise.candidates.map((x) => ({ level: x.level, id: x.id }));
+    const g = gradeRanking(precise, [c[0], c[2], c[1]], 'simulation');
+    expect(g.picks[1].rankShared).toBe(false);
+    expect(g.orderCredit).toBeLessThan(1);
   });
 
   it('rejects duplicate selections', () => {

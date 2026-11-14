@@ -19,7 +19,7 @@ Requires Node 20+ (developed on Node 22). No API keys or backend are needed. Eve
 |---|---|
 | `npm run dev` | Vite dev server |
 | `npm run build` / `npm run preview` | Type-check, build to `dist/`, and serve the build |
-| `npm test` | Vitest unit and integration tests for the engine (69 tests) |
+| `npm test` | Vitest unit and integration tests for the engine (79 tests) |
 | `npx playwright install chromium` then `npm run test:e2e` | Playwright browser tests: a full Beginner round, a full Hybrid round, the opening-rack sprint, and the card reference |
 | `npm run validate-card -- path/to/card.json` | Validate a card definition and print variant counts |
 | `npm run calibrate` | Re-calibrate the heuristic score against the Monte Carlo engine |
@@ -49,6 +49,7 @@ src/engine/            pure TypeScript, no React — fully unit-tested
   evaluator.ts         exact hand matching with NMJL joker rules
   heuristic.ts         heuristic opportunity score (0–100) + rack potential
   simulate.ts          Monte Carlo completion-probability engine
+  demand.ts            per-card tile demand (keep rates) for opponents' discards
   passes.ts            pass evaluation / best-pass search (decision quality)
   charleston.ts        centralised Charleston rules (directions, blind, courtesy, jokers)
   opponents.ts         casual / strategic / random opponent profiles (hidden-info safe)
@@ -69,8 +70,8 @@ Stack: React 19, TypeScript, Vite, Tailwind CSS v4, Vitest, and Playwright. Prog
 ## Numbers you'll see (and what they mean)
 
 - **Heuristic opportunity score (0–100).** A deterministic relative score. **It is not a probability.** It is the product of per-tile binomial chances of collecting each missing tile (exact pair/single tiles cannot use Jokers; groups of 3+ can, and exposed hands can call), passed through a 4th root to spread the values. Its weights were calibrated against the simulator: mean Spearman rank correlation 0.85 on 80 fresh random racks.
-- **Simulated completion probability.** A Monte Carlo estimate of completing the hand within 20 turns from the current rack, under a documented draw-plus-calls model. Each estimate uses 1,000 or 4,000 simulated walls, a fixed seed, and a 95% Wilson interval. It is **not a probability of winning the game**: opponents finishing first is not modelled. For a category or line, the probability is a true union under an adaptive strategy, not a sum.
-- Grading uses simulated probabilities only when every candidate was simulated and the leader has at least 25 successes. Otherwise it falls back to the heuristic score. The basis is always shown.
+- **Simulated completion probability.** A Monte Carlo estimate of completing the hand within 20 turns from the current rack, under a documented draw-plus-calls model. Opponents hold real hands and discard by measured tile demand, so popular tiles such as Flowers are thrown less often than Winds. Each estimate uses 1,000 or 4,000 simulated walls, a fixed seed, and a 95% Wilson interval. It is **not a probability of winning the game**: opponents finishing first is not modelled. For a category or line, the probability is a true union under an adaptive strategy, not a sum.
+- Grading uses simulated probabilities only when every candidate was simulated and the leader has at least 25 successes. Otherwise it falls back to the heuristic score. The basis is always shown. Candidates whose simulated probabilities differ by less than the 95% margin of error are treated as tied: they share a rank, and picking either earns full credit.
 
 Full details, validation, and a comparison with published research: [docs/PROBABILITY.md](docs/PROBABILITY.md). Rules and simplifications: [docs/RULES.md](docs/RULES.md).
 

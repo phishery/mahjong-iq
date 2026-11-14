@@ -21,19 +21,49 @@ Its weights were tuned by `scripts/calibrate-heuristic.ts`. That script simulate
 | Simulated probability of the heuristic's top line, relative to the best simulated line | **0.85** |
 | Older "sum of expected waits" form (kept as `form: 'waits'`) | 0.68 Spearman, 0.47 ratio |
 
-The calibration figures are limited by simulation noise: individual line probabilities are often only 1–5%.
+The calibration figures are limited by simulation noise: individual line probabilities are often only 1–5%. Re-checked after opponents switched to demand-weighted discards: mean Spearman 0.83 and top-pick ratio 0.81 on 60 racks (600 trials each) with the same weights, so they were kept.
 
 ## 2. Monte Carlo completion probability (`src/engine/simulate.ts`)
 
 **Model (default "draws + calls"):**
 1. Unknown tiles = the full set − the player's rack − tiles the player passed away (those are known to be in opponents' racks).
-2. The wall is a uniformly shuffled sequence of unknown tiles, sampled without replacement (partial Fisher–Yates).
-3. Each turn the player draws a tile. Then three opponents each draw, and discard that tile. Jokers are never discarded.
+2. The unknown tiles are shuffled uniformly and sampled without replacement (partial Fisher–Yates). Each opponent is dealt a 13-tile concealed hand from them, and the rest is the wall.
+3. Each turn the player draws a tile. Then each of the three opponents draws a tile and discards one of their 14, chosen at random with weight 1 − *keep rate* of that tile (see **Tile demand** below). Jokers are never discarded.
 4. The player may call a discard for Mahjong (any tile), or to expose a pung, kong or quint of an exposed target when holding count−1 of that group. Exposed tiles are locked, and later targets must contain every exposed group.
 5. After each acquisition the player discards a tile the current target doesn't need, preferring tiles the runner-up target doesn't need either.
 6. Success means the hand is complete within T turns (default 20).
 
-**Not modelled:** opponents winning first, defensive discarding, joker exchanges, opponents calling tiles, and the remaining Charleston passes. The engine treats the current rack as if play started now. It therefore estimates **hand completion under a simplified model**, never the probability of winning a game.
+**Other models (Settings → Simulation → Model):**
+- **Random discards** (`random-calls`): the earlier model. Each opponent discards the tile they just drew, so every kind is thrown in proportion to its live supply.
+- **Draws only** (`draws`): no discards are ever called.
+
+**Not modelled:** opponents winning first, defensive discarding (holding a tile only to block), joker exchanges, opponents calling tiles, and the remaining Charleston passes. The engine treats the current rack as if play started now. It therefore estimates **hand completion under a simplified model**, never the probability of winning a game.
+
+**Tile demand (`src/engine/demand.ts`):** random discards overstate how often popular tiles reach the table. Under that model, a hand that needs a second set of Flowers could count on Flowers being thrown as often as Winds. Demand is now measured for each card when it is first simulated. The engine deals 600 random 13-tile racks and has each player aim at their top three heuristic targets, keeping options open as in the early game. A tile's *keep rate* is the share of held copies that one of those targets uses. Numbers are pooled by rank across suits, and Green and Red Dragons are pooled. The White Dragon stays separate because it doubles as zero, and Jokers keep 100%. On the 2026 card it gives:
+
+| Tile | Keep rate | Tile | Keep rate |
+|---|---|---|---|
+| Joker | 100% | 5s | 76% |
+| Flower | 99% | White Dragon | 76% |
+| 6s | 88% | 8s | 71% |
+| 4s | 81% | Green/Red Dragon | 68% |
+| 2s | 76% | 3s | 65% |
+| 7s | 63% | 9s | 49% |
+| 1s | 39% | Winds | 20–26% |
+
+Measuring it takes about 0.7 s, once per card, in the simulation worker.
+
+**Effect on an example rack** (2026 card, rack 5B 5C 5C 6C 7C 9C 9D W WD F F F J, 20,000 trials):
+
+| Category | Random discards | Demand-weighted |
+|---|---|---|
+| Consecutive Run | 23.0% | 23.4% |
+| 13579 | 9.9% | 11.0% |
+| 2468 | 9.5% | 2.8% |
+| Any Like Numbers | 9.4% | 6.4% |
+| Winds – Dragons | 8.0% | 2.8% |
+
+2468 here relied on calling discarded Flowers and drops by about two-thirds. Winds – Dragons drops too, because its best hand also needs Flowers and Dragons that opponents hold on to.
 
 **Adaptive category and line targets:** the simulated player retargets after every acquisition to the closest variant still eligible. Success means any variant completes. That is a genuine union probability under a documented strategy, not a sum of overlapping chances.
 
@@ -41,7 +71,8 @@ The calibration figures are limited by simulation noise: individual line probabi
 
 **Validation (`tests/engine/simulate-scoring.test.ts`):**
 - One missing exact pair tile under the draw-only model matches the hypergeometric 1 − C(136,18)/C(139,18) to within 4 standard errors (20,000 trials).
-- With calls, Mahjong on any discard gives 4 looks per turn, and the result matches the hypergeometric value with 40 looks.
+- Under random discards, Mahjong on any discard gives 4 looks per turn, and the result matches the hypergeometric value with 40 looks.
+- Under demand-weighted discards, a hand waiting on a Flower completes less often than under random discards, and a hand waiting on a Wind completes more often.
 - A missing kong tile with 1 live copy plus 8 Jokers matches the hypergeometric value with 9 outs.
 - Tiles known to be elsewhere are never drawn.
 
@@ -59,6 +90,7 @@ As a result, the simulator models calls. The UI distinguishes a "best hand in ca
 ## 4. Scoring (`src/engine/scoring.ts`, `src/engine/passes.ts`)
 
 - **Strategic recognition (70 points):** each pick earns min(1, value / best value for that slot)^γ, with γ = 1.5 for simulated probabilities and 3 for heuristic scores. The slots are weighted 45/27/18, plus 10% for consistent ordering. For example, picking a hand at 18% when the best is 19% earns about 92% credit; picking one at 4% earns about 10%.
+- **Statistical ties:** simulated probabilities are estimates. Two candidates are tied when the gap between them is within the 95% margin of error of that gap, 1.96·√(p₁(1−p₁)/n₁ + p₂(1−p₂)/n₂). This treats the two estimates as independent. Common random numbers make real differences less noisy than that, so the test errs towards calling a tie. A tied candidate shares a rank (shown as "2="). A pick tied with the best option for its slot earns full credit, two tied picks may be ordered either way, and a top-three entry is not reported as "overlooked" when you picked something tied with it instead. At 4,000 trials and probabilities around 10%, gaps under about 1.3 points are ties. Heuristic scores are deterministic and tie only when equal.
 - **Charleston decisions (30 points):** each pass is judged only on what was known when passing, by the potential of the kept tiles (a weighted blend of the best five lines). Credit is half the pass's percentile among all legal passes and half its normalised closeness to the best pass. The actual outcome (the change in best opportunity after receiving tiles) is shown separately and never scored.
 - Opening-rack drills have no passes, so recognition counts for the full 100.
 - Scores are stored and compared per mode and per round length only.

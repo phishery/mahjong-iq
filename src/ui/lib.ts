@@ -36,7 +36,8 @@ export interface Settings {
   courtesy: boolean;
   simulation: boolean;
   simPrecision: 'fast' | 'precise';
-  simModel: 'calls' | 'draws';
+  /** 'calls': demand-weighted opponent discards (default); 'random-calls': the earlier random-discard model. */
+  simModel: 'calls' | 'random-calls' | 'draws';
   horizon: number;
   animations: 'normal' | 'fast' | 'off';
   tileLabels: boolean;

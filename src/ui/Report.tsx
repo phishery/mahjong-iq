@@ -248,7 +248,7 @@ export function Report({
                 <ol className="space-y-1">
                   {d.grade.top.map((c, i) => (
                     <li key={i}>
-                      {i + 1}. {c.label} <span className="text-ink-faint">({formatMetric(d.grade.basis === 'simulation' ? (c.sim?.p ?? 0) : c.heuristic, d.grade.basis)})</span>
+                      {d.grade.ranks?.[c.key] ?? i + 1}. {c.label} <span className="text-ink-faint">({formatMetric(d.grade.basis === 'simulation' ? (c.sim?.p ?? 0) : c.heuristic, d.grade.basis)})</span>
                     </li>
                   ))}
                 </ol>

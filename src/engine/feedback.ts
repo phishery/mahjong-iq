@@ -5,6 +5,7 @@
  */
 
 import {
+  isTie,
   metricOf,
   rankedBy,
   selectionKey,
@@ -147,6 +148,10 @@ export function decisionFeedback(card: LoadedCard, d: DecisionRecord, prev?: Dec
 
   if (first.key === best.key) {
     summary.push(`You spotted the strongest option: ${best.label} (${metricName(basis)} ${formatMetric(metricOf(best, basis), basis)}).`);
+  } else if (first.candidate && isTie(first.candidate, best, basis)) {
+    summary.push(
+      `Your first choice ${first.candidate.label} (${formatMetric(first.value, basis)}) is statistically tied with ${best.label} (${formatMetric(metricOf(best, basis), basis)}): the gap is within the simulation’s margin of error, so either is a sound lead.`,
+    );
   } else if (first.candidate) {
     const why = explainDifference(card, best.best, first.candidate.best);
     summary.push(

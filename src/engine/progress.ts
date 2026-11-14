@@ -85,7 +85,8 @@ export function recordRound(prev: ProgressData, card: LoadedCard, state: RoundSt
     const picksCats = d.grade.picks.map((x) => x.candidate?.best.variant.categoryId);
     const c = cat(p, bestCat);
     c.wasBest++;
-    const first = picksCats[0] === bestCat;
+    // A first pick statistically tied with the best counts as recognising it.
+    const first = picksCats[0] === bestCat || d.grade.picks[0].rank === 1;
     if (first) c.recognizedFirst++;
     if (picksCats.includes(bestCat)) c.recognizedTop3++;
     // Leitner update for the category that was best.

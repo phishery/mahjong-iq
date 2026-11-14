@@ -182,6 +182,38 @@ export function rankedBy(an: DecisionAnalysis, basis: Basis): Candidate[] {
   return [...an.candidates].sort((a, b) => metricOf(b, basis) - metricOf(a, basis) || b.heuristic - a.heuristic);
 }
 
+/** z for the 95% margin of error used to call two simulated results a tie. */
+export const TIE_Z = 1.96;
+
+/**
+ * Are two candidates statistically indistinguishable under the grading basis?
+ *
+ * Simulation: tie when the gap between the two estimated probabilities is within the 95%
+ * margin of error of that gap, z·√(p₁(1−p₁)/n₁ + p₂(1−p₂)/n₂). This treats the estimates as
+ * independent; the simulator's common random numbers make real differences less noisy than
+ * that, so the test errs towards calling a tie. Heuristic scores are deterministic, so they
+ * tie only when equal.
+ */
+export function isTie(a: Candidate, b: Candidate, basis: Basis): boolean {
+  if (a.key === b.key) return true;
+  const va = metricOf(a, basis);
+  const vb = metricOf(b, basis);
+  if (basis !== 'simulation' || !a.sim || !b.sim) return Math.abs(va - vb) <= 1e-9;
+  const se = Math.sqrt((va * (1 - va)) / a.sim.trials + (vb * (1 - vb)) / b.sim.trials);
+  return Math.abs(va - vb) <= TIE_Z * se + 1e-12;
+}
+
+/**
+ * Competition rank that respects ties: 1 + the number of candidates that are better by more
+ * than the margin of error. Several candidates can share a rank.
+ */
+export function tieRank(an: DecisionAnalysis, c: Candidate, basis: Basis): number {
+  const v = metricOf(c, basis);
+  let better = 0;
+  for (const d of an.candidates) if (metricOf(d, basis) > v && !isTie(d, c, basis)) better++;
+  return better + 1;
+}
+
 /** Every distinct kind the candidate's best variant needs (for overlap measures). */
 export function neededKinds(c: Candidate): Set<number> {
   return new Set(Array.from(c.best.variant.kinds));

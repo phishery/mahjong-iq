@@ -45,7 +45,7 @@ export function RankingReview({ card, decision, simSettings }: { card: LoadedCar
                     <span className="text-[13px] font-semibold leading-tight">{selectionLabel(card, p.selection)}</span>
                   </span>
                   <span className="flex items-center justify-between mt-1 text-[11px] text-ink-faint">
-                    <span>engine rank #{p.rank}</span>
+                    <span>engine rank #{p.rank}{p.rankShared ? ' (tie)' : ''}</span>
                     <span className="font-semibold text-ink">{formatMetric(p.value, basis)}</span>
                   </span>
                   <CreditBar value={p.credit} className="mt-1" />
@@ -58,22 +58,41 @@ export function RankingReview({ card, decision, simSettings }: { card: LoadedCar
             <ol className="space-y-1.5">
               {grade.top.map((c, i) => {
                 const yours = grade.recognized.includes(c.key);
+                const rank = grade.ranks?.[c.key] ?? i + 1;
+                const shared = grade.ranks ? Object.values(grade.ranks).filter((r) => r === rank).length > 1 : false;
+                const covered = !yours && !grade.overlooked.some((o) => o.key === c.key);
                 return (
                   <li key={c.key} className={cx('rounded-lg px-2 py-1.5 border', yours ? 'border-jade-200 bg-jade-50' : 'border-dashed border-line')}>
                     <span className="flex items-start gap-1.5">
-                      <span className="text-xs font-bold text-ink-faint mt-px">{i + 1}</span>
+                      <span className="text-xs font-bold text-ink-faint mt-px" title={shared ? 'Tied: within the margin of error' : undefined}>
+                        {rank}
+                        {shared ? '=' : ''}
+                      </span>
                       <span className="text-[13px] font-semibold leading-tight">{c.label}</span>
                     </span>
                     <span className="flex items-center justify-between mt-1 text-[11px]">
-                      <span className={yours ? 'text-jade-700 font-semibold' : 'text-[#8a6a1c]'}>{yours ? '✓ you found it' : 'overlooked'}</span>
+                      <span className={yours || covered ? 'text-jade-700 font-semibold' : 'text-[#8a6a1c]'}>
+                        {yours ? '✓ you found it' : covered ? '≈ you picked a tied option' : 'overlooked'}
+                      </span>
                       <span className="font-semibold text-ink">{formatMetric(metricOf(c, basis), basis)}</span>
                     </span>
                   </li>
                 );
               })}
             </ol>
+            {grade.alsoTied?.length ? (
+              <p className="mt-1.5 text-[11px] leading-snug text-ink-faint" data-testid="also-tied">
+                Also tied within the margin of error:{' '}
+                {grade.alsoTied.map((c) => `${c.label} (${formatMetric(metricOf(c, basis), basis)})`).join(', ')}
+              </p>
+            ) : null}
           </div>
         </div>
+        {basis === 'simulation' && Object.values(grade.ranks ?? {}).some((r, _i, all) => all.indexOf(r) !== all.lastIndexOf(r)) && (
+          <p className="mt-2 text-[11px] leading-snug text-ink-faint">
+            <strong>=</strong> marks a statistical tie: the gap between the simulated probabilities is within the 95% margin of error, so the order between them is not meaningful. Tied picks get full credit.
+          </p>
+        )}
 
         <div className="mt-3 rounded-lg bg-paper px-3 py-2 text-xs text-ink-soft">
           <span className="font-semibold text-ink">Backup diversity:</span> your three choices {grade.yourFlexibility.overlap > 0.6 ? 'overlap heavily' : grade.yourFlexibility.overlap > 0.35 ? 'share some key tiles' : 'use different tiles'} (overlap{' '}
@@ -96,7 +115,7 @@ export function RankingReview({ card, decision, simSettings }: { card: LoadedCar
               </thead>
               <tbody>
                 {ordered.map((c, i) => (
-                  <CandidateRow key={c.key} c={c} i={i} picked={grade.picks.some((p) => p.key === c.key)} />
+                  <CandidateRow key={c.key} c={c} rank={grade.ranks?.[c.key] ?? i + 1} picked={grade.picks.some((p) => p.key === c.key)} />
                 ))}
               </tbody>
             </table>
@@ -118,10 +137,10 @@ export function RankingReview({ card, decision, simSettings }: { card: LoadedCar
   );
 }
 
-function CandidateRow({ c, i, picked }: { c: Candidate; i: number; picked: boolean }) {
+function CandidateRow({ c, rank, picked }: { c: Candidate; rank: number; picked: boolean }) {
   return (
     <tr className={cx('border-t border-line', picked && 'bg-jade-50/70')}>
-      <td className="py-1 text-ink-faint">{i + 1}</td>
+      <td className="py-1 text-ink-faint">{rank}</td>
       <td className="py-1 pr-2">
         <span className="font-medium">{c.label}</span>
         {c.level === 'category' && <span className="text-ink-faint"> · {c.strongVariants} strong / {c.variantCount}</span>}

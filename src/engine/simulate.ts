@@ -3,23 +3,30 @@
  *
  * Two documented models are available (both surfaced in the UI next to every number):
  *
- * "calls" (default) — draws + calls
+ * "calls" (default) — draws + calls, demand-weighted opponent discards
  *  - Start from the player's current rack, as if regular play began now.
  *  - Unknown tiles = full set − player's rack − tiles the player passed away (known to be
  *    in opponents' racks, so never drawn from the wall in this model).
- *  - The wall is a uniformly shuffled sequence of unknown tiles (finite-population sampling
- *    WITHOUT replacement). Each turn the player draws one tile, then each of the three
- *    opponents draws and discards one tile. Opponents' discards are modelled as their drawn
- *    tile (a random unknown tile); Jokers are never discarded.
+ *  - The unknown tiles are uniformly shuffled (finite-population sampling WITHOUT
+ *    replacement). Each opponent is dealt a 13-tile concealed hand from them; the rest is
+ *    the wall. Each turn the player draws one tile, then each of the three opponents draws
+ *    one tile and discards one tile from their 14. The discard is chosen at random with
+ *    weight 1 − keep rate (see demand.ts): tiles the card makes popular, such as Flowers,
+ *    are thrown far less often than Winds. Jokers are never discarded.
  *  - The player may call a discard for Mahjong (any group, including pairs/singles), or to
  *    expose a pung/kong/quint of a non-concealed target when already holding count−1 of
  *    that group (naturals or Jokers), following NMJL calling rules. Exposed tiles are locked
  *    and the hand may only adapt to variants containing every exposed group.
  *  - Concealed hands can never expose; they can still win on a discard.
  *  - After each acquisition the player discards a tile the current best target does not need.
- *  - Ignored: opponents' wins, defensive play, joker exchanges, opponents calling tiles.
+ *  - Ignored: opponents' wins, defensive play (holding a tile only to block), joker
+ *    exchanges, opponents calling tiles.
  *
- * "draws" — draw-only: the same, but no discards are ever called.
+ * "random-calls" — the earlier model: draws + calls, but each opponent discards the tile
+ *   they just drew (a uniformly random unknown tile), so every kind is thrown in proportion
+ *   to its live supply. Kept for comparison.
+ *
+ * "draws" — draw-only: no opponents' discards are ever called.
  *
  * Success = the targeted hand is complete (14 tiles) within T player turns. This estimates a
  * hand COMPLETION probability under a simplified model. It is NOT a probability of winning a
@@ -39,10 +46,11 @@
 
 import type { HandVariant, LoadedCard } from './card/schema';
 import { HAND_SIZE } from './card/parser';
+import { cardDemand, discardWeights } from './demand';
 import { createRng, mixSeed } from './rng';
 import { JOKER_INDEX, KINDS, NUM_KINDS, SUPPLY } from './tiles';
 
-export type SimModel = 'calls' | 'draws';
+export type SimModel = 'calls' | 'random-calls' | 'draws';
 
 export interface SimTarget {
   key: string;
@@ -173,6 +181,31 @@ function chooseDiscard(hand: Int16Array, locked: Int16Array, primary: HandVarian
   return JOKER_INDEX;
 }
 
+const OPPONENTS = 3;
+const HAND_SIZE_13 = 13;
+const OPP_SLOTS = HAND_SIZE_13 + 1;
+
+/**
+ * An opponent's discard from their 14 tiles: the slot of a random tile chosen with
+ * probability proportional to its discard weight (1 − keep rate). Returns −1 if every tile
+ * has zero weight (all Jokers).
+ */
+function weightedDiscard(opp: Int16Array, base: number, size: number, w: Float64Array, rng: { next(): number }): number {
+  let total = 0;
+  for (let i = 0; i < size; i++) total += w[opp[base + i]];
+  if (total <= 0) return -1;
+  let r = rng.next() * total;
+  let last = -1;
+  for (let i = 0; i < size; i++) {
+    const m = w[opp[base + i]];
+    if (m <= 0) continue;
+    last = i;
+    r -= m;
+    if (r < 0) return i;
+  }
+  return last;
+}
+
 export function buildUnknownPool(rack: number[], knownElsewhere: number[]): number[] {
   const pool: number[] = [];
   for (let k = 0; k < NUM_KINDS; k++) {
@@ -209,9 +242,19 @@ export function simulate(card: LoadedCard, input: SimInput): SimResult[] {
   const pool = buildUnknownPool(input.rack, input.knownElsewhere);
   const basePool = pool.slice();
   const T = input.draws;
-  const allowCalls = input.model === 'calls';
-  const streamLen = Math.min(pool.length, T * (allowCalls ? 4 : 1));
+  const allowCalls = input.model !== 'draws';
+  const weighted = input.model === 'calls';
+  const weights = weighted ? discardWeights(cardDemand(card)) : null;
+  // Weighted model: the first `dealt` shuffled tiles are the opponents' concealed hands.
+  const dealt = weighted ? Math.min(OPPONENTS * HAND_SIZE_13, pool.length) : 0;
+  const streamLen = Math.min(pool.length, dealt + T * (allowCalls ? 4 : 1));
   const stream = new Int16Array(streamLen);
+  // Opponents' hands as tile lists (OPP_SLOTS slots each: 13 dealt + 1 drawn); a list keeps
+  // the discard choice to ~14 steps instead of a scan over every tile kind.
+  const oppInit = new Int16Array(OPPONENTS * OPP_SLOTS);
+  const oppInitSize = new Int16Array(OPPONENTS);
+  const opp = new Int16Array(OPPONENTS * OPP_SLOTS);
+  const oppSize = new Int16Array(OPPONENTS);
   const concealedOf = card.variants.map((v) => card.lineById.get(v.lineId)!.concealed);
   const targets = input.targets.map((t) => ({ key: t.key, vs: t.variantIndices.map((i) => card.variants[i]) }));
   const successes = new Array(targets.length).fill(0);
@@ -222,6 +265,11 @@ export function simulate(card: LoadedCard, input: SimInput): SimResult[] {
   for (let t = 0; t < input.trials; t++) {
     for (let i = 0; i < basePool.length; i++) pool[i] = basePool[i];
     const len = shuffledPrefix(pool, mixSeed(input.seed, t), stream);
+    oppInitSize.fill(0);
+    for (let i = 0; i < dealt; i++) {
+      const o = i % OPPONENTS;
+      oppInit[o * OPP_SLOTS + oppInitSize[o]++] = stream[i];
+    }
 
     for (let ti = 0; ti < targets.length; ti++) {
       let eligible = targets[ti].vs;
@@ -230,8 +278,12 @@ export function simulate(card: LoadedCard, input: SimInput): SimResult[] {
         hand[k] = input.rack[k];
         locked[k] = 0;
       }
-      let pos = 0;
+      let pos = dealt;
       let done = false;
+      // Opponents restart from the same hands and discard RNG for every target (common random numbers).
+      opp.set(oppInit);
+      oppSize.set(oppInitSize);
+      const discardRng = weighted ? createRng(mixSeed(input.seed, t, 0x6f707073)) : null;
 
       // Select the closest and runner-up eligible variants for the current hand.
       let bestV: HandVariant = eligible[0];
@@ -277,9 +329,19 @@ export function simulate(card: LoadedCard, input: SimInput): SimResult[] {
         const primaryExposable = !concealedOf[primary.index];
 
         // --- Three opponents draw and discard ---
-        for (let o = 0; o < 3 && pos < len; o++) {
-          const tile = stream[pos++];
-          if (tile === JOKER_INDEX) continue; // jokers are kept, never discarded
+        for (let o = 0; o < OPPONENTS && pos < len; o++) {
+          let tile: number;
+          if (weights) {
+            const base = o * OPP_SLOTS;
+            opp[base + oppSize[o]++] = stream[pos++];
+            const slot = weightedDiscard(opp, base, oppSize[o], weights, discardRng!);
+            if (slot < 0) continue; // nothing they are willing to throw
+            tile = opp[base + slot];
+            opp[base + slot] = opp[base + --oppSize[o]];
+          } else {
+            tile = stream[pos++];
+            if (tile === JOKER_INDEX) continue; // jokers are kept, never discarded
+          }
           // Mahjong on the discard?
           if (near && near.length) {
             hand[tile]++;
@@ -353,8 +415,10 @@ export function simulate(card: LoadedCard, input: SimInput): SimResult[] {
 export function describeSimModel(s: SimSettings): string {
   const model =
     s.model === 'calls'
-      ? 'draws plus calls on random opponent discards for exposures and Mahjong'
-      : 'draws only, no calls';
+      ? 'draws plus calls for exposures and Mahjong; opponents discard by tile demand, so popular tiles such as Flowers are thrown less often'
+      : s.model === 'random-calls'
+        ? 'draws plus calls on random opponent discards for exposures and Mahjong'
+        : 'draws only, no calls';
   return (
     `Chance to complete the hand within ${s.draws} turns from the current rack (${model}; ` +
     `opponents' own progress, defence and joker swaps are ignored). ` +

@@ -34,7 +34,7 @@ export function SettingsDialog({ open, onClose, settings, setSettings }: { open:
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm">Model</span>
-                <Segmented value={settings.simModel} onChange={(v) => set('simModel', v)} options={[{ value: 'calls', label: 'Draws + calls' }, { value: 'draws', label: 'Draws only' }]} />
+                <Segmented value={settings.simModel} onChange={(v) => set('simModel', v)} options={[{ value: 'calls', label: 'Draws + calls' }, { value: 'random-calls', label: 'Random discards' }, { value: 'draws', label: 'Draws only' }]} />
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm">Horizon</span>
