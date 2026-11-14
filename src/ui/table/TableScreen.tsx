@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { HandVariant, LoadedCard } from '../../engine/card/schema';
-import type { Exposure } from '../../engine/table/hand';
 import type { TableAction } from '../../engine/table/table';
 import type { TableView } from '../../engine/table/view';
 import { countsFromIds, JOKER_INDEX, KIND_OF_ID, kindOfTile, type TileId } from '../../engine/tiles';
 import { CardHands } from '../CardHands';
-import { Button, Chip, cx, Drawer, Panel, PatternText } from '../components';
+import { Button, Chip, cx, Drawer, Panel, PatternText, useMediaQuery } from '../components';
 import { Rack } from '../Rack';
 import { Tile, TileBack } from '../Tile';
-import { describeEvent, DIR_ARROW, groupName, positionOf, possessive, seatAt, seatLabel, tileName, windName, type Position } from './describe';
+import { DIR_ARROW, groupName, possessive, seatAt, seatLabel, tileName, windName } from './describe';
 
 export interface TableScreenProps {
   card: LoadedCard;
@@ -29,52 +28,96 @@ export interface TableScreenProps {
 
 const isJoker = (id: TileId) => KIND_OF_ID[id] === JOKER_INDEX;
 
-function TileBacks({ n }: { n: number }) {
+const tileH = (w: number) => Math.round((w * 82) / 60);
+
+/** A tile turned a quarter turn, taking up its rotated footprint in the layout. */
+function Turned({ w, deg, children }: { w: number; deg: 90 | -90; children: ReactNode }) {
+  const h = tileH(w);
   return (
-    <span className="inline-flex flex-wrap gap-[2px]" aria-label={`${n} concealed tiles`}>
-      {Array.from({ length: n }, (_, i) => (
-        <TileBack key={i} width={10} />
-      ))}
+    <span className="relative inline-block shrink-0" style={{ width: h, height: w }}>
+      <span className="absolute" style={{ left: (h - w) / 2, top: (w - h) / 2, width: w, height: h, transform: `rotate(${deg}deg)` }}>
+        {children}
+      </span>
     </span>
   );
 }
 
-function ExposureTiles({ e, size = 'xs' }: { e: Exposure; size?: 'xs' | 'sm' }) {
-  return (
-    <span className="inline-flex gap-[2px] rounded-md bg-paper px-1 py-1 border border-line" title={`${groupName(e.tiles.length)} of ${tileName(e.calledTile)}`}>
-      {e.tiles.map((id) => (
-        <Tile key={id} kind={kindOfTile(id)} size={size} />
-      ))}
-    </span>
-  );
+/** Sizes in px: phones get smaller tiles so the middle of the table keeps its room. */
+function useTableSizes() {
+  const wide = useMediaQuery('(min-width: 768px)');
+  return wide
+    ? { back: 16, exposure: 34, floor: 38, yourExposure: 46 }
+    : { back: 10, exposure: 24, floor: 27, yourExposure: 36 };
 }
 
-function OpponentCard({ view, pos, active }: { view: TableView; pos: Position; active: boolean }) {
-  const seat = seatAt(view, pos);
+function SeatHeader({ view, seat, compact }: { view: TableView; seat: number; compact?: boolean }) {
   const s = view.seats[seat];
   return (
+    <div className={cx('flex items-center gap-1.5 text-sm min-w-0', compact && 'flex-col text-center gap-0.5')}>
+      <span className="w-6 h-6 rounded-full bg-jade-50 text-jade-700 text-[11px] font-bold flex items-center justify-center shrink-0" title={windName(view, seat)}>
+        {s.wind}
+      </span>
+      <span className={cx('font-semibold truncate', compact && 'text-xs max-w-[4.5rem]')}>{s.name}</span>
+      {!compact && <span className="hidden sm:inline text-[11px] text-ink-faint shrink-0">{s.bot ? 'bot' : 'player'}</span>}
+      {s.pending && view.phase.name !== 'ended' && <span className="w-2 h-2 rounded-full bg-gold animate-pulse shrink-0" title="Thinking…" />}
+    </div>
+  );
+}
+
+/** The player across: a row of tile backs and their exposures, upright. */
+function AcrossSeat({ view, active, sizes }: { view: TableView; active: boolean; sizes: ReturnType<typeof useTableSizes> }) {
+  const seat = seatAt(view, 'across');
+  const s = view.seats[seat];
+  return (
+    <div className={cx('rounded-2xl border bg-white px-3 py-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-2', active ? 'border-jade-400 ring-2 ring-jade-200' : 'border-line')} data-testid="seat-across">
+      <SeatHeader view={view} seat={seat} />
+      <span className="inline-flex gap-[2px]" aria-label={`${s.concealedCount} concealed tiles`}>
+        {Array.from({ length: s.concealedCount }, (_, i) => (
+          <TileBack key={i} width={sizes.back} />
+        ))}
+      </span>
+      {s.exposures.map((e, i) => (
+        <span key={i} className="inline-flex gap-[2px]" title={`${groupName(e.tiles.length)} of ${tileName(e.calledTile)}`} data-testid="exposure">
+          {e.tiles.map((id) => (
+            <Tile key={id} kind={kindOfTile(id)} id={id} width={sizes.exposure} />
+          ))}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * A player on your left or right: their tiles run down the side of the table, turned to face
+ * them as they would at a real table (left player's tiles turn clockwise, right player's the
+ * other way).
+ */
+function SideSeat({ view, pos, active, sizes }: { view: TableView; pos: 'left' | 'right'; active: boolean; sizes: ReturnType<typeof useTableSizes> }) {
+  const seat = seatAt(view, pos);
+  const s = view.seats[seat];
+  const deg = pos === 'left' ? 90 : -90;
+  return (
     <div
-      className={cx('rounded-2xl border bg-white px-3 py-2.5 min-w-0', active ? 'border-jade-400 ring-2 ring-jade-200' : 'border-line')}
+      className={cx('h-full rounded-2xl border bg-white px-1.5 py-2 flex flex-col items-center gap-2', active ? 'border-jade-400 ring-2 ring-jade-200' : 'border-line')}
       data-testid={`seat-${pos}`}
     >
-      <div className="flex items-center gap-2 text-sm">
-        <span className="w-6 h-6 rounded-full bg-jade-50 text-jade-700 text-[11px] font-bold flex items-center justify-center shrink-0" title={windName(view, seat)}>
-          {s.wind}
-        </span>
-        <span className="font-semibold truncate">{s.name}</span>
-        <span className="hidden sm:inline text-[11px] text-ink-faint shrink-0">{s.bot ? 'bot' : 'player'}</span>
-        {s.pending && view.phase.name !== 'ended' && <span className="ml-auto w-2 h-2 rounded-full bg-gold animate-pulse shrink-0" title="Thinking…" />}
-      </div>
-      <div className="mt-2">
-        <TileBacks n={s.concealedCount} />
-      </div>
-      {s.exposures.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {s.exposures.map((e, i) => (
-            <ExposureTiles key={i} e={e} />
+      <SeatHeader view={view} seat={seat} compact />
+      <span className="flex flex-col gap-[2px]" aria-label={`${s.concealedCount} concealed tiles`}>
+        {Array.from({ length: s.concealedCount }, (_, i) => (
+          <Turned key={i} w={sizes.back} deg={deg}>
+            <TileBack width={sizes.back} />
+          </Turned>
+        ))}
+      </span>
+      {s.exposures.map((e, i) => (
+        <span key={i} className="flex flex-col gap-[2px]" title={`${groupName(e.tiles.length)} of ${tileName(e.calledTile)}`} data-testid="exposure">
+          {e.tiles.map((id) => (
+            <Turned key={id} w={sizes.exposure} deg={deg}>
+              <Tile kind={kindOfTile(id)} id={id} width={sizes.exposure} />
+            </Turned>
           ))}
-        </div>
-      )}
+        </span>
+      ))}
     </div>
   );
 }
@@ -141,10 +184,9 @@ export function TableScreen({ card, view, act, error, clearError, callDeadline, 
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : s.length >= required ? s : [...s, id]));
   };
 
-  const lastDiscard = view.floor[view.floor.length - 1] ?? null;
+  const sizes = useTableSizes();
   const callTile = ph.name === 'calls' ? ph.tile : null;
   const activeSeat = ph.name === 'turn' ? ph.seat : null;
-  const events = view.events.map((e) => ({ n: e.n, text: describeEvent(view, e) })).filter((e) => e.text).slice(-7).reverse();
   const youSeat = view.seats[view.you];
 
   const actionBar = (() => {
@@ -298,49 +340,45 @@ export function TableScreen({ card, view, act, error, clearError, callDeadline, 
   return (
     <div className="max-w-[1400px] mx-auto px-3 sm:px-4 py-4 space-y-4" data-testid="table">
       {banner}
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,240px)_1fr_minmax(0,240px)] lg:grid-rows-[auto_1fr]">
-        <div className="grid grid-cols-3 gap-2 lg:contents">
-          <div className="lg:col-start-1 lg:row-start-2">
-            <OpponentCard view={view} pos="left" active={activeSeat === seatAt(view, 'left')} />
-          </div>
-          <div className="lg:col-start-2 lg:row-start-1">
-            <OpponentCard view={view} pos="across" active={activeSeat === seatAt(view, 'across')} />
-          </div>
-          <div className="lg:col-start-3 lg:row-start-2">
-            <OpponentCard view={view} pos="right" active={activeSeat === seatAt(view, 'right')} />
-          </div>
+      {/* The table: across on top, left and right running down the sides, discards in the middle. */}
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_1fr] gap-2 sm:gap-3">
+        <div className="col-start-2 row-start-1">
+          <AcrossSeat view={view} active={activeSeat === seatAt(view, 'across')} sizes={sizes} />
         </div>
-        <section className="lg:col-start-2 lg:row-start-2 rounded-2xl bg-jade-900/[0.04] border border-line p-3 min-h-[180px] flex flex-col" data-testid="floor">
+        <div className="col-start-1 row-start-1 row-span-2">
+          <SideSeat view={view} pos="left" active={activeSeat === seatAt(view, 'left')} sizes={sizes} />
+        </div>
+        <div className="col-start-3 row-start-1 row-span-2">
+          <SideSeat view={view} pos="right" active={activeSeat === seatAt(view, 'right')} sizes={sizes} />
+        </div>
+        <section className="col-start-2 row-start-2 rounded-2xl bg-jade-900/[0.04] border border-line p-2 sm:p-3 min-h-[220px] flex flex-col" data-testid="floor">
           <div className="flex items-center gap-3 text-xs text-ink-faint">
             <span>
-              Wall: <strong className="text-ink tabular-nums">{view.wallCount}</strong> tiles
+              Wall: <strong className="text-ink tabular-nums">{view.wallCount}</strong>
             </span>
             <span>
-              Floor: <strong className="text-ink tabular-nums">{view.floor.length}</strong>
+              Discards: <strong className="text-ink tabular-nums">{view.floor.length}</strong>
             </span>
             <button type="button" className="ml-auto font-semibold text-jade-700" onClick={() => setCardOpen(true)} data-testid="table-card">
               Card
             </button>
           </div>
-          <div className="mt-2 flex flex-wrap gap-[3px] content-start flex-1">
-            {view.floor.map((d, i) => (
-              <span key={d.tile} title={`${seatLabel(view, d.by)} · ${tileName(d.tile)}`}>
-                <Tile kind={kindOfTile(d.tile)} id={d.tile} size={i === view.floor.length - 1 ? 'sm' : 'xs'} highlight={i === view.floor.length - 1 ? 'gold' : null} />
-              </span>
-            ))}
+          <div className="mt-2 flex flex-wrap gap-[3px] content-start flex-1" data-testid="floor-tiles">
+            {view.floor.map((d, i) => {
+              const latest = i === view.floor.length - 1 && ph.name !== 'ended';
+              return (
+                <span key={d.tile} title={`${seatLabel(view, d.by)} discarded ${tileName(d.tile)}`}>
+                  <Tile
+                    kind={kindOfTile(d.tile)}
+                    id={d.tile}
+                    width={sizes.floor}
+                    highlight={latest ? 'gold' : null}
+                    badge={latest ? view.seats[d.by].wind : null}
+                  />
+                </span>
+              );
+            })}
           </div>
-          {lastDiscard && ph.name !== 'ended' && (
-            <p className="mt-2 text-xs text-ink-soft">
-              Last discard: <strong>{tileName(lastDiscard.tile)}</strong> by {seatLabel(view, lastDiscard.by)} ({positionOf(view, lastDiscard.by)})
-            </p>
-          )}
-          <ol className="mt-2 space-y-0.5 text-xs text-ink-soft border-t border-line pt-2" data-testid="table-log">
-            {events.map((e, i) => (
-              <li key={e.n} className={i === 0 ? 'text-ink font-medium' : ''}>
-                {e.text}
-              </li>
-            ))}
-          </ol>
         </section>
       </div>
 
@@ -356,10 +394,29 @@ export function TableScreen({ card, view, act, error, clearError, callDeadline, 
         className={cx(ph.name === 'turn' && ph.seat === view.you && 'ring-2 ring-jade-200')}
       >
         <div className="px-4 pb-4">
+          {(view.legal.mahjong || view.legal.calls.some((c) => c.type === 'mahjong')) && (
+            <div role="status" className="mb-3 rounded-xl bg-[#fbf3e1] border border-gold px-3 py-2 flex flex-wrap items-center gap-3 animate-fade-up" data-testid="mahjong-banner">
+              <span className="font-display text-lg font-semibold text-[#7a5a14]">You have Mahjong!</span>
+              <span className="text-sm text-ink-soft">
+                {view.legal.mahjong ? 'Your tiles complete a hand on the card.' : 'That discard completes a hand on the card.'}
+              </span>
+              <Button
+                className="ml-auto bg-gold hover:bg-[#b4871f] animate-pulse"
+                onClick={() => act(view.legal.mahjong ? { type: 'mahjong' } : { type: 'call', response: { type: 'mahjong' } })}
+                data-testid="mahjong-banner-declare"
+              >
+                Declare Mahjong!
+              </Button>
+            </div>
+          )}
           {youSeat.exposures.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-3" data-testid="your-exposures">
               {youSeat.exposures.map((e, i) => (
-                <ExposureTiles key={i} e={e} size="sm" />
+                <span key={i} className="inline-flex gap-[2px] rounded-lg bg-paper p-1 border border-line" title={`${groupName(e.tiles.length)} of ${tileName(e.calledTile)}`}>
+                  {e.tiles.map((id) => (
+                    <Tile key={id} kind={kindOfTile(id)} id={id} width={sizes.yourExposure} />
+                  ))}
+                </span>
               ))}
             </div>
           )}
@@ -431,7 +488,11 @@ function ResultPanel({ card, view }: { card: LoadedCard; view: TableView }) {
               </div>
               <div className="mt-2 flex flex-wrap gap-1 items-center">
                 {s.exposures.map((e, i) => (
-                  <ExposureTiles key={i} e={e} />
+                  <span key={i} className="inline-flex gap-[2px] rounded-md bg-paper p-1 border border-line">
+                    {e.tiles.map((id) => (
+                      <Tile key={id} kind={kindOfTile(id)} id={id} size="sm" />
+                    ))}
+                  </span>
                 ))}
                 {(view.revealed?.[s.seat] ?? [])
                   .slice()

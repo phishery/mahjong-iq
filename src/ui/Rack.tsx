@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { HandVariant } from '../engine/card/schema';
 import { matchVariant } from '../engine/evaluator';
 import { countsFromIds, KIND_INDEX, KIND_OF_ID, kindOfTile, type TileId } from '../engine/tiles';
@@ -18,6 +18,16 @@ export interface RackProps {
   focusVariant?: HandVariant | null;
   showLabels?: boolean;
   disabledIds?: Set<TileId>;
+}
+
+/** Pixels the pointer must travel before a press becomes a drag (smaller moves are taps). */
+const DRAG_THRESHOLD = 6;
+
+/** Move `id` to `to` in `order`. */
+export function moveTile(order: TileId[], id: TileId, to: number): TileId[] {
+  const next = order.filter((x) => x !== id);
+  next.splice(Math.max(0, Math.min(to, next.length)), 0, id);
+  return next;
 }
 
 function sortTiles(tiles: TileId[], mode: SortMode, prevOrder: TileId[]): TileId[] {
@@ -50,8 +60,13 @@ export function Rack({
 }: RackProps) {
   const [mode, setMode] = useState<SortMode>('suit');
   const [order, setOrder] = useState<TileId[]>(() => sortTiles(tiles, 'suit', []));
-  const dragFrom = useRef<number | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef(new Map<TileId, HTMLDivElement>());
+  /** The tile being dragged (set once the pointer has moved past the threshold). */
+  const [dragging, setDragging] = useState<TileId | null>(null);
+  /** A drag just ended: swallow the click the browser sends afterwards. */
+  const suppressClick = useRef(false);
+  const orderRef = useRef<TileId[]>([]);
   const [tileW, setTileW] = useState(56);
 
   // Size tiles to fit the rack on one row where possible (44–60px), wrapping only on phones.
@@ -104,20 +119,58 @@ export function Rack({
     return role;
   }, [focusVariant, tiles, order]);
 
-  const flyClass = outgoingDirection === 'right' ? '[animation:fly-right_0.45s_ease-in_forwards]' : outgoingDirection === 'left' ? '[animation:fly-left_0.45s_ease-in_forwards]' : '[animation:fly-up_0.45s_ease-in_forwards]';
+  orderRef.current = order;
 
-  const onDrop = (to: number) => {
-    const from = dragFrom.current;
-    dragFrom.current = null;
-    if (from === null || from === to) return;
-    setMode('manual');
-    setOrder((prev) => {
-      const next = [...prev];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    });
-  };
+  /**
+   * Pointer-based dragging (mouse, touch and pen alike). The browser's native drag-and-drop
+   * was unreliable here: it does not start from buttons in some browsers, never fires for
+   * touch, and could be interrupted when the rack re-rendered mid-drag. While dragging, the
+   * tile moves live to the slot nearest the pointer, so rows that wrap work too.
+   */
+  const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>, id: TileId) => {
+    if (e.button !== 0 || !e.isPrimary) return;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let started = false;
+    const move = (ev: PointerEvent) => {
+      if (!started) {
+        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < DRAG_THRESHOLD) return;
+        started = true;
+        setDragging(id);
+        setMode('manual');
+      }
+      ev.preventDefault();
+      // Nearest slot by distance to each tile's centre.
+      let best = -1;
+      let bestD = Infinity;
+      orderRef.current.forEach((tid, i) => {
+        const el = itemRefs.current.get(tid);
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        const d = Math.hypot(ev.clientX - (r.left + r.width / 2), ev.clientY - (r.top + r.height / 2));
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+      });
+      if (best >= 0 && orderRef.current[best] !== id) setOrder((prev) => moveTile(prev, id, best));
+    };
+    const end = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      if (started) {
+        suppressClick.current = true;
+        setTimeout(() => (suppressClick.current = false), 0);
+        setDragging(null);
+      }
+    };
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  }, []);
+
+  const flyClass = outgoingDirection === 'right' ? '[animation:fly-right_0.45s_ease-in_forwards]' : outgoingDirection === 'left' ? '[animation:fly-left_0.45s_ease-in_forwards]' : '[animation:fly-up_0.45s_ease-in_forwards]';
 
   return (
     <div>
@@ -135,7 +188,7 @@ export function Rack({
         <span className="text-xs text-ink-faint hidden sm:inline">Drag tiles to rearrange</span>
       </div>
       <div ref={boxRef} className="flex flex-wrap justify-center gap-1 min-h-[96px] pt-3" data-testid="rack">
-        {order.map((id, i) => {
+        {order.map((id) => {
           const kind = kindOfTile(id);
           const isSel = selected.includes(id);
           const isOut = outgoing.includes(id);
@@ -145,11 +198,26 @@ export function Rack({
           return (
             <div
               key={id}
-              draggable
-              onDragStart={() => (dragFrom.current = i)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => onDrop(i)}
-              className={cx('relative', isOut && flyClass, isNew && !isOut && 'animate-pop-in rounded-[18%]')}
+              ref={(el) => {
+                if (el) itemRefs.current.set(id, el);
+                else itemRefs.current.delete(id);
+              }}
+              data-tile-id={id}
+              draggable={false}
+              onPointerDown={(e) => onPointerDown(e, id)}
+              onClickCapture={(e) => {
+                if (suppressClick.current) {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }
+              }}
+              onDragStart={(e) => e.preventDefault()}
+              className={cx(
+                'relative touch-none select-none cursor-grab',
+                dragging === id && 'z-10 scale-105 cursor-grabbing drop-shadow-lg',
+                isOut && flyClass,
+                isNew && !isOut && 'animate-pop-in rounded-[18%]',
+              )}
               style={isNew ? { animationDelay: `${incoming.indexOf(id) * 90}ms` } : undefined}
             >
               <Tile
