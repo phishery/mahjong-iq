@@ -50,6 +50,15 @@ export function SettingsDialog({ open, onClose, settings, setSettings }: { open:
             <span className="text-sm font-medium">Animations</span>
             <Segmented value={settings.animations} onChange={(v) => set('animations', v)} options={[{ value: 'normal', label: 'Normal' }, { value: 'fast', label: 'Fast' }, { value: 'off', label: 'Off' }]} />
           </div>
+          <div className="flex items-center justify-between gap-3 py-2">
+            <span className="text-sm font-medium">Tile style</span>
+            <Segmented
+              value={settings.tileStyle ?? 'painted'}
+              onChange={(v) => set('tileStyle', v)}
+              options={[{ value: 'classic', label: 'Classic' }, { value: 'painted', label: 'Painted' }]}
+              testId="tile-style"
+            />
+          </div>
           <Toggle checked={settings.tileLabels} onChange={(v) => set('tileLabels', v)} label="Tile labels" hint="Show names under tiles (e.g. “5 Dot”)." />
           <Toggle checked={settings.confidence} onChange={(v) => set('confidence', v)} label="Confidence training" hint="Rate your confidence in your #1 choice; compare with results over time." />
           <Toggle checked={settings.trackProgress} onChange={(v) => set('trackProgress', v)} label="Track progress locally" hint="Stored only in this browser. Powers spaced repetition." />

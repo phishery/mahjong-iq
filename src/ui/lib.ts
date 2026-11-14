@@ -41,6 +41,8 @@ export interface Settings {
   horizon: number;
   animations: 'normal' | 'fast' | 'off';
   tileLabels: boolean;
+  /** Tile artwork: the original 'classic' faces or the 'painted' set. */
+  tileStyle: 'classic' | 'painted';
   highlightSelected: boolean;
   confidence: boolean;
   trackProgress: boolean;
@@ -57,6 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
   horizon: DEFAULT_SIM.draws,
   animations: 'normal',
   tileLabels: false,
+  tileStyle: 'painted',
   highlightSelected: true,
   confidence: false,
   trackProgress: true,

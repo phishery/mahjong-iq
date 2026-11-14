@@ -7,7 +7,7 @@ import { countsFromIds, JOKER_INDEX, KIND_OF_ID, kindOfTile, type TileId } from 
 import { CardHands } from '../CardHands';
 import { Button, Chip, cx, Drawer, Panel, PatternText } from '../components';
 import { Rack } from '../Rack';
-import { Tile } from '../Tile';
+import { Tile, TileBack } from '../Tile';
 import { describeEvent, DIR_ARROW, groupName, positionOf, possessive, seatAt, seatLabel, tileName, windName, type Position } from './describe';
 
 export interface TableScreenProps {
@@ -33,7 +33,7 @@ function TileBacks({ n }: { n: number }) {
   return (
     <span className="inline-flex flex-wrap gap-[2px]" aria-label={`${n} concealed tiles`}>
       {Array.from({ length: n }, (_, i) => (
-        <span key={i} className="w-[9px] h-[13px] rounded-[2px] bg-jade-600 border border-jade-700/40" />
+        <TileBack key={i} width={10} />
       ))}
     </span>
   );
@@ -325,7 +325,7 @@ export function TableScreen({ card, view, act, error, clearError, callDeadline, 
           <div className="mt-2 flex flex-wrap gap-[3px] content-start flex-1">
             {view.floor.map((d, i) => (
               <span key={d.tile} title={`${seatLabel(view, d.by)} · ${tileName(d.tile)}`}>
-                <Tile kind={kindOfTile(d.tile)} size={i === view.floor.length - 1 ? 'sm' : 'xs'} highlight={i === view.floor.length - 1 ? 'gold' : null} />
+                <Tile kind={kindOfTile(d.tile)} id={d.tile} size={i === view.floor.length - 1 ? 'sm' : 'xs'} highlight={i === view.floor.length - 1 ? 'gold' : null} />
               </span>
             ))}
           </div>

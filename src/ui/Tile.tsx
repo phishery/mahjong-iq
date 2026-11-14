@@ -1,5 +1,21 @@
-import { memo } from 'react';
-import { isDragon, isSuited, isWind, kindName, type TileKind } from '../engine/tiles';
+import { createContext, memo, useContext, useId } from 'react';
+import { isDragon, isSuited, isWind, KIND_INDEX, KIND_OF_ID, kindName, type TileId, type TileKind } from '../engine/tiles';
+import { PaintedBack, PaintedBody, PaintedFace } from './tiles/painted';
+
+export type TileStyle = 'classic' | 'painted';
+
+/** Which tile artwork to draw; set once near the root from the person's settings. */
+export const TileStyleContext = createContext<TileStyle>('classic');
+
+const svgId = (raw: string) => raw.replace(/[^A-Za-z0-9_-]/g, '');
+
+/** Which of the eight Flower designs a physical Flower tile shows. */
+export function flowerVariant(id: TileId | undefined): number {
+  if (id === undefined) return 0;
+  let first = id;
+  while (first > 0 && KIND_OF_ID[first - 1] === KIND_INDEX.F) first--;
+  return id - first;
+}
 
 /**
  * American Mahjong tile faces drawn as SVG (no image assets): Dots, Bams (1 Bam is a bird),
@@ -231,6 +247,8 @@ export interface TileProps {
   testId?: string;
   /** Explicit pixel width (overrides size). */
   width?: number;
+  /** Physical tile id: lets the eight Flowers show different art. */
+  id?: TileId;
 }
 
 /** Short label shown under tiles when "tile labels" is on. */
@@ -257,7 +275,10 @@ export const Tile = memo(function Tile({
   ariaPressed,
   testId,
   width,
+  id,
 }: TileProps) {
+  const style = useContext(TileStyleContext);
+  const uid = svgId(useId());
   const w = width ?? WIDTH[size];
   const h = Math.round((w * 82) / 60);
   const interactive = !!onClick;
@@ -275,15 +296,23 @@ export const Tile = memo(function Tile({
       style={{ width: w, height: h }}
     >
       <svg viewBox="0 0 60 82" width={w} height={h} className={`block rounded-[18%] ${ring}`} style={{ boxShadow: 'var(--shadow-tile)' }} aria-hidden>
-        <defs>
-          <linearGradient id="tileFace" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#fffdf8" />
-            <stop offset="1" stopColor="#f3eee2" />
-          </linearGradient>
-        </defs>
-        <rect x={0.5} y={3} width={59} height={78.5} rx={9} fill={selected ? '#2f876a' : '#1f6f5c'} />
-        <rect x={0.5} y={0.5} width={59} height={76} rx={9} fill="url(#tileFace)" stroke={selected ? '#2f876a' : '#d8d0bf'} strokeWidth={selected ? 2 : 1} />
-        <Face kind={kind} />
+        {style === 'painted' ? (
+          <PaintedBody uid={uid} selected={selected}>
+            <PaintedFace kind={kind} variant={flowerVariant(id)} />
+          </PaintedBody>
+        ) : (
+          <>
+            <defs>
+              <linearGradient id="tileFace" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#fffdf8" />
+                <stop offset="1" stopColor="#f3eee2" />
+              </linearGradient>
+            </defs>
+            <rect x={0.5} y={3} width={59} height={78.5} rx={9} fill={selected ? '#2f876a' : '#1f6f5c'} />
+            <rect x={0.5} y={0.5} width={59} height={76} rx={9} fill="url(#tileFace)" stroke={selected ? '#2f876a' : '#d8d0bf'} strokeWidth={selected ? 2 : 1} />
+            <Face kind={kind} />
+          </>
+        )}
       </svg>
       {badge && (
         <span className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-[color:var(--color-gold)] text-[9px] font-bold text-white flex items-center justify-center shadow">
@@ -319,3 +348,18 @@ export const Tile = memo(function Tile({
     </span>
   );
 });
+
+/** The back of a tile, for concealed racks and the wall. */
+export function TileBack({ width }: { width: number }) {
+  const style = useContext(TileStyleContext);
+  const uid = svgId(useId());
+  const h = Math.round((width * 82) / 60);
+  if (style !== 'painted') {
+    return <span className="inline-block rounded-[2px] bg-jade-600 border border-jade-700/40" style={{ width, height: h }} />;
+  }
+  return (
+    <svg viewBox="0 0 60 82" width={width} height={h} aria-hidden className="block">
+      <PaintedBack uid={uid} />
+    </svg>
+  );
+}

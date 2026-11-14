@@ -154,6 +154,7 @@ export function Rack({
             >
               <Tile
                 kind={kind}
+                id={id}
                 width={tileW}
                 selected={isSel}
                 dimmed={(!!focusVariant && !role && !isSel) || (selectable && disabled)}

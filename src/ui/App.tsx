@@ -8,6 +8,7 @@ import { createRng, randomSeed } from '../engine/rng';
 import { tableFromRound, type SeatIndex, type TableState } from '../engine/table';
 import { countsFromIds } from '../engine/tiles';
 import { CardReference } from './CardReference';
+import { TileStyleContext } from './Tile';
 import { cx } from './components';
 import { ProgressDialog, SettingsDialog } from './Dialogs';
 import { GameScreen, type Drill } from './GameScreen';
@@ -30,9 +31,10 @@ import { useGame } from './useGame';
 
 // The game table is loaded on demand so the trainer stays light.
 const SoloTable = lazy(() => import('./table/SoloTable').then((m) => ({ default: m.SoloTable })));
+const TileSheet = lazy(() => import('./tiles/TileSheet').then((m) => ({ default: m.TileSheet })));
 const OnlineScreen = lazy(() => import('./table/OnlineScreen').then((m) => ({ default: m.OnlineScreen })));
 
-type Screen = 'home' | 'game' | 'report' | 'play' | 'online';
+type Screen = 'home' | 'game' | 'report' | 'play' | 'online' | 'tiles';
 
 const BOT_NAMES = ['Mei', 'Rosa', 'Ada'];
 
@@ -78,6 +80,7 @@ export function App() {
   const sessionStart = useRef(loadProgress().history.length);
   useEffect(() => {
     if (roomCode) setScreen('online');
+    else if (location.hash === '#tiles') setScreen('tiles');
   }, [roomCode]);
 
   const simRef = useRef<SimClient | null>(null);
@@ -177,6 +180,7 @@ export function App() {
   const anim = settings.animations === 'off' ? 'no-anim' : '';
 
   return (
+    <TileStyleContext.Provider value={settings.tileStyle ?? 'painted'}>
     <div className={cx('min-h-full flex flex-col', anim)}>
       <Header
         screen={screen}
@@ -246,6 +250,7 @@ export function App() {
               onNewRound={again}
             />
           )}
+          {screen === 'tiles' && <TileSheet />}
           {screen === 'online' && <OnlineScreen initialCode={roomCode} showLabels={settings.tileLabels} onHome={() => setScreen('home')} />}
         </Suspense>
       </main>
@@ -278,6 +283,7 @@ export function App() {
         }}
       />
     </div>
+    </TileStyleContext.Provider>
   );
 }
 
